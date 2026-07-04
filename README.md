@@ -10,8 +10,8 @@ Pip install the dvc library:
 Spin up the local minio server:
 `docker run -p 9000:9000 -p 9001:9001 -v ./minio-data:/data -e MINIO_ROOT_USER=<USERNAME> -e MINIO_ROOT_PASSWORD=<PASSWORD> minio/minio server /data --console-address ":9001"`
 
-Setup local minio server as remote (Assuming the bucket name is `sensor-data`):
-`dvc remote add -d minio s3://sensor-data`
+Setup local minio server as remote (Assuming the bucket name is `nasa-cmapss`):
+`dvc remote add -d minio s3://nasa-cmapss`
 
 Overwrite s3 endpoint:
 `dvc remote modify minio endpointurl http://localhost:9000`
