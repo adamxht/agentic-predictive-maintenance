@@ -1,6 +1,6 @@
 [core]
     remote = minio
 ['remote "minio"']
-    url = s3://sensor-data
+    url = s3://nasa-cmapss
     endpointurl = http://localhost:9000
     use_ssl = false
