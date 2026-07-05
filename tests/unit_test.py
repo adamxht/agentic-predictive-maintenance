@@ -1,9 +1,21 @@
 import numpy as np
+import optuna
 import pandas as pd
 import pytest
+from sklearn.ensemble import RandomForestRegressor
+from xgboost import XGBRegressor
 
-from src.components import data_ingestion, feature_engineering
+from src.components import (
+    data_ingestion,
+    evaluate,
+    explain,
+    feature_engineering,
+    model_trainer,
+)
 from src.config_schema import TargetConfig
+from src.exception import CustomException
+from src.model_training_config_schema import HyperparameterSpec
+from src.models.model_factory import ModelFactory
 from src.utils import get_sensor_columns
 
 
@@ -17,6 +29,13 @@ def raw_multi_engine_dataframe() -> pd.DataFrame:
             "T24": [10.0, 20.0, 30.0, 100.0, 200.0, 300.0],
         }
     )
+
+
+@pytest.fixture
+def optuna_trial() -> optuna.Trial:
+    """A live Optuna trial for exercising suggest_hyperparameter(s)."""
+    study = optuna.create_study()
+    return study.ask()
 
 
 def test_add_remaining_useful_life_computes_correct_rul(raw_multi_engine_dataframe):
@@ -205,3 +224,107 @@ def test_split_train_validation_by_engine_has_no_engine_overlap(
 
     assert train_engine_ids.isdisjoint(validation_engine_ids)
     assert train_engine_ids | validation_engine_ids == {1, 2}
+
+
+def test_model_factory_creates_registered_models_with_params():
+    random_forest = ModelFactory.create(
+        "random_forest", {"n_estimators": 5, "random_state": 0}
+    )
+    xgboost_model = ModelFactory.create(
+        "xgboost", {"n_estimators": 5, "random_state": 0}
+    )
+
+    assert isinstance(random_forest, RandomForestRegressor)
+    assert random_forest.n_estimators == 5
+    assert isinstance(xgboost_model, XGBRegressor)
+
+
+def test_model_factory_raises_custom_exception_for_unknown_model():
+    with pytest.raises(CustomException):
+        ModelFactory.create("not_a_real_model", {})
+
+
+def test_suggest_hyperparameter_respects_int_bounds(optuna_trial):
+    spec = HyperparameterSpec(type="int", low=2, high=4)
+
+    value = model_trainer.suggest_hyperparameter(optuna_trial, "n_estimators", spec)
+
+    assert value in {2, 3, 4}
+
+
+def test_suggest_hyperparameter_respects_categorical_choices(optuna_trial):
+    spec = HyperparameterSpec(type="categorical", choices=["sqrt", "log2"])
+
+    value = model_trainer.suggest_hyperparameter(optuna_trial, "max_features", spec)
+
+    assert value in {"sqrt", "log2"}
+
+
+def test_suggest_hyperparameters_covers_every_search_space_entry(optuna_trial):
+    search_space = {
+        "n_estimators": HyperparameterSpec(type="int", low=1, high=2),
+        "bootstrap": HyperparameterSpec(type="categorical", choices=[True, False]),
+    }
+
+    suggested = model_trainer.suggest_hyperparameters(optuna_trial, search_space)
+
+    assert set(suggested.keys()) == {"n_estimators", "bootstrap"}
+
+
+def test_compute_regression_metrics_matches_known_values():
+    true_values = [0.0, 1.0, 2.0, 3.0]
+    predicted_values = [0.0, 1.0, 2.0, 3.0]
+
+    metrics = evaluate.compute_regression_metrics(true_values, predicted_values)
+
+    assert metrics["rmse"] == pytest.approx(0.0)
+    assert metrics["mae"] == pytest.approx(0.0)
+    assert metrics["r2"] == pytest.approx(1.0)
+
+
+def test_derive_near_failure_labels_applies_threshold_and_offset():
+    true_values = [0.05, 0.2]
+    predicted_values = [0.05, 0.12]
+
+    true_labels, predicted_labels = evaluate.derive_near_failure_labels(
+        true_values, predicted_values, threshold=0.1, pred_offset=0.05
+    )
+
+    assert true_labels.tolist() == [1, 0]
+    assert predicted_labels.tolist() == [1, 1]
+
+
+def test_compute_binary_classification_metrics_perfect_separation():
+    true_values = [0.01, 0.02, 0.5, 0.6]
+    predicted_values = [0.01, 0.02, 0.5, 0.6]
+
+    metrics = evaluate.compute_binary_classification_metrics(
+        true_values, predicted_values, threshold=0.1
+    )
+
+    assert metrics["accuracy"] == pytest.approx(1.0)
+    assert metrics["precision"] == pytest.approx(1.0)
+    assert metrics["recall"] == pytest.approx(1.0)
+    assert metrics["roc_auc"] == pytest.approx(1.0)
+
+
+def test_compute_confusion_matrix_shape_and_counts():
+    true_values = [0.01, 0.02, 0.5, 0.6]
+    predicted_values = [0.01, 0.5, 0.02, 0.6]
+
+    confusion_matrix_array = evaluate.compute_confusion_matrix(
+        true_values, predicted_values, threshold=0.1
+    )
+
+    assert confusion_matrix_array.shape == (2, 2)
+    assert confusion_matrix_array.sum() == 4
+
+
+def test_sample_features_for_explanation_caps_to_available_rows():
+    features = pd.DataFrame({"a": [1, 2, 3]})
+
+    sample = explain.sample_features_for_explanation(
+        features, sample_size=10, random_state=0
+    )
+
+    assert len(sample) == 3
