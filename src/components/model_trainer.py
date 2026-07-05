@@ -76,7 +76,9 @@ def train_with_hyperparameter_search(
             return validation_rmse
 
         study = optuna.create_study(direction="minimize")
-        study.optimize(objective, n_trials=model_config.n_trials)
+        study.optimize(
+            objective, n_trials=model_config.n_trials, show_progress_bar=True
+        )
 
         logging.info(
             f"{model_config.name}: best validation RMSE {study.best_value:.4f} "
