@@ -72,6 +72,10 @@ dvc add data/raw/
 dvc push
 ```
 
+After pushing, the `nasa-cmapss` bucket in the MinIO console should show the tracked data:
+
+![MinIO object browser showing the nasa-cmapss bucket](images/minio_example.png)
+
 ## 📓 Notebooks
 
 - [notebooks/step1_eda_RUL.ipynb](notebooks/step1_eda_RUL.ipynb) — exploratory data analysis and feature understanding
