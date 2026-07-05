@@ -224,7 +224,11 @@ __marimo__/
 /data/processed/
 /logs/
 
-# MLflow tracking store, artifacts, and generated training plots
+# MLflow tracking store, artifacts, and generated training/test-eval plots
 /mlruns/
 /mlflow.db
 /training_logs/
+/test_logs/
+
+# Locally saved trained models (opt-in alternative to MLflow's model registry)
+/trained_model/

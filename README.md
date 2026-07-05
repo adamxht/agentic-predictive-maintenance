@@ -10,6 +10,8 @@ A polished end-to-end machine learning project for predictive maintenance and an
   adjustable knobs (target, splits, feature engineering, feature selection) via YAML
 - A config-driven model training pipeline (Optuna tuning, SHAP explainability, MLflow
   experiment tracking and model registry) for RandomForest and XGBoost
+- A test-set evaluation entry point that scores a trained model (from MLflow or a local
+  path) against the held-out CMAPSS test set, with the same metrics and plots as training
 - DVC-based data versioning with a local MinIO remote for development
 - Modular Python utilities and configuration for repeatable experimentation
 
@@ -22,16 +24,20 @@ A polished end-to-end machine learning project for predictive maintenance and an
 │   └── model_training/            # Model training pipeline configs
 ├── data/                          # Versioned datasets and DVC metadata
 ├── notebooks/                     # EDA and modeling notebooks
-├── scripts/                       # Entry-point scripts (run_data_preparation.py, run_model_training.py)
+├── scripts/                       # Entry-point scripts (run_data_preparation.py,
+│                                  # run_model_training.py, run_test_set_eval.py)
 ├── src/                           # Reusable Python modules
 │   ├── components/                # Individual pipeline steps (ingestion, feature engineering,
-│   │                               # model training, evaluation, explainability)
+│   │                               # test-set ingestion, model training/loading, evaluation,
+│   │                               # explainability)
+│   ├── configs/                   # Pydantic config schemas + YAML loaders
 │   ├── models/                    # Model factory + interfaces
 │   ├── pipeline/                  # Orchestrators that chain components together
 │   └── plots.py                   # Evaluation/explainability plotting functions
-├── tests/                         # Unit tests
-├── training_logs/                 # Generated plots per training run (gitignored)
+├── tests/                         # Unit tests + in-memory integration tests
+├── training_logs/ , test_logs/    # Generated plots per run (gitignored)
 ├── mlruns/ , mlflow.db             # MLflow tracking store and artifacts (gitignored)
+├── trained_model/                 # Locally saved models, opt-in (gitignored)
 ├── minio-data/                    # Local MinIO storage for development
 ├── README.md                      # Project overview and setup guide
 └── PLAN.md                        # Project planning notes
@@ -143,7 +149,8 @@ pipeline:
 
 ### Running it
 
-```bash   # or any environment with requirements.txt installed
+```bash
+# any environment with requirements.txt installed
 python scripts/run_data_preparation.py --config configs/data_transformation/default.yaml
 ```
 
@@ -155,6 +162,31 @@ This writes (paths configurable under `paths:` in the YAML):
 
 Progress, warnings (e.g. missing values filled, zero-variance features), and errors are
 logged to both the console and `logs/<timestamp>.log`.
+
+### The held-out test set
+
+The same script also prepares `data/raw/test_FD001.txt` + `data/raw/RUL_FD001.txt` into
+`data/processed/test.csv`, via the `test_set:` section of the same config. This set is
+*censored* (engines don't run to failure), so it can't reuse `train_validation_split` or
+`preprocessing` as-is — instead `test_set_ingestion` reconstructs the target from the
+provided terminal RUL answer key (`RUL = rul_at_last_cycle + (last_cycle - cycle)`), and
+`scaling`/`feature_selection` reuse the scaler and selected-feature list already fit/chosen
+on the training split (`paths.scaler_path` / `paths.selected_features_path`) rather than
+refitting on test data:
+
+```yaml
+test_set:
+  raw_data_path: "data/raw/test_FD001.txt"
+  raw_rul_path: "data/raw/RUL_FD001.txt"
+  processed_test_path: "data/processed/test.csv"
+  pipeline:
+    steps:
+      - "test_set_ingestion"
+      - "missing_value_handling"
+      - "scaling"
+      - "feature_engineering"
+      - "feature_selection"
+```
 
 ## 🤖 Model training pipeline
 
@@ -192,6 +224,7 @@ models:
   - name: "random_forest"
     n_trials: 100
     # registered_model_name: "life_ratio_rf_xgb_random_forest"  # optional override
+    save_locally: true # opt-in: also save to trained_model/<run_name>/<name>/model.pkl
     search_space:
       n_estimators: { type: "int", low: 100, high: 600 }
       # ...
@@ -209,6 +242,10 @@ Each model is registered in the MLflow Model Registry under its own name — if
 `registered_model_name` isn't set, it defaults to `<run_name>_<model_name>` (e.g.
 `life_ratio_rf_xgb_random_forest`), so RandomForest and XGBoost don't collide under one
 name. Load a registered model directly with `mlflow.pyfunc.load_model("models:/<name>/<version>")`.
+
+`save_locally` is off by default; when enabled it *also* writes the fitted model to
+`trained_model/<run_name>/<model_name>/model.pkl` (or `save_model_path` if set), so the
+test-set evaluation below can score a model without any MLflow dependency at all.
 
 ### Running it
 
@@ -234,11 +271,90 @@ Comparing runs side by side (RandomForest vs. XGBoost, train and validation metr
 
 ![MLflow training runs comparison across models](images/mlflow_compare_runs.png)
 
+## 🧪 Test-set evaluation
+
+Scores an already-trained model against `data/processed/test.csv` (produced by the data
+preprocessing pipeline above), computing the same regression + near-failure classification
+metrics and plots the training pipeline does — just on the held-out test set instead of
+validation, and for one model instead of a list.
+
+The model can come from either MLflow or a local path, so this script has no MLflow
+dependency at all when using the latter:
+
+```bash
+# From MLflow (registered model or a specific run's artifact)
+python scripts/run_test_set_eval.py --model "models:/life_ratio_xgboost/1"
+python scripts/run_test_set_eval.py --model "runs:/<run_id>/model"
+
+# From a local path (requires save_locally: true during training)
+python scripts/run_test_set_eval.py --model trained_model/life_ratio_rf_xgb/xgboost
+```
+
+Metrics are printed as a table:
+
+```text
+╒═══════════╤═════════╕
+│ Metric    │   Value │
+╞═══════════╪═════════╡
+│ RMSE      │  0.0679 │
+├───────────┼─────────┤
+│ MAE       │  0.048  │
+├───────────┼─────────┤
+│ R2        │  0.911  │
+├───────────┼─────────┤
+│ ACCURACY  │  0.9946 │
+├───────────┼─────────┤
+│ PRECISION │  0.7034 │
+├───────────┼─────────┤
+│ RECALL    │  0.7094 │
+├───────────┼─────────┤
+│ F1        │  0.7064 │
+├───────────┼─────────┤
+│ ROC_AUC   │  0.9963 │
+╘═══════════╧═════════╛
+```
+
+Every setting is available as a CLI flag (`--threshold`, `--pred-offset`, `--target-type`,
+`--run-name`, `--sample-size`, `--plots-output-dir`, `--no-plots`, ...) with sensible
+defaults. An optional `--config path/to.yaml` can override any subset of them — **any field
+present in that YAML takes precedence over the matching CLI flag**, so a config only needs
+to set the values it wants to change:
+
+```yaml
+# overrides.yaml
+model: "models:/life_ratio_xgboost/1"
+threshold: 0.15
+run_name: "xgboost_test_eval"
+```
+
+```bash
+python scripts/run_test_set_eval.py --threshold 0.1 --config overrides.yaml
+# runs with threshold=0.15 (config wins), not 0.1
+```
+
+Plots are written to `test_logs/<run_name>/plots/` (via [src/plots.py](src/plots.py), the
+same functions the training pipeline uses), and metrics are logged to the console and
+`logs/<timestamp>.log`.
+
 ## ✅ Running the tests
 
 ```bash
-pytest tests/unit_test.py
+pytest tests/unit_test.py         # component-level unit tests
+pytest tests/integration_test.py  # full data-prep -> train -> eval flow, gatekeeping
+pytest tests/                     # everything
 ```
+
+**Unit tests** (`unit_test.py`) exercise individual `src/components/` functions in
+isolation with small, hand-built DataFrames — fast, no I/O, pinpoint exactly which
+transformation broke.
+
+**Integration tests** (`integration_test.py`) run the real `DataPreparationPipeline` and
+`TestSetPreparationPipeline` against the actual `data/raw/*.txt` files end-to-end (outputs
+redirected to a temp dir, never touching `data/processed/`), then fit RandomForest/XGBoost
+with their real best hyperparameters (hardcoded, not re-searched) and assert the metrics
+against a baseline captured the same way. These exist to gatekeep a model before release —
+representative of actual performance, not just correctness of the code path — so they
+require `data/raw/{train,test,RUL}_FD001.txt` to be present (e.g. via `dvc pull` or git-lfs).
 
 ## 📝 Notes
 

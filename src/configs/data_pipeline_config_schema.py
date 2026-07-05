@@ -29,6 +29,14 @@ DEFAULT_PIPELINE_STEPS = [
     "feature_selection",
 ]
 
+DEFAULT_TEST_SET_PIPELINE_STEPS = [
+    "test_set_ingestion",
+    "missing_value_handling",
+    "scaling",
+    "feature_engineering",
+    "feature_selection",
+]
+
 TARGET_COLUMN_BY_TYPE = {
     "rul": "RUL",
     "life_ratio": "life_ratio",
@@ -91,6 +99,26 @@ class PipelineStepsConfig(BaseModel):
     steps: list[str] = Field(default_factory=lambda: list(DEFAULT_PIPELINE_STEPS))
 
 
+class TestSetConfig(BaseModel):
+    """Settings for preparing the held-out, censored test set.
+
+    The test set never runs to failure, so it skips train_validation_split
+    and preprocessing in favor of test_set_ingestion, which reconstructs the
+    target from the provided terminal RUL answer key. scaling and
+    feature_selection reuse the scaler/selected-features artifacts fitted on
+    the training split (paths.scaler_path / paths.selected_features_path).
+    """
+
+    raw_data_path: str = "data/raw/test_FD001.txt"
+    raw_rul_path: str = "data/raw/RUL_FD001.txt"
+    processed_test_path: str = "data/processed/test.csv"
+    pipeline: PipelineStepsConfig = Field(
+        default_factory=lambda: PipelineStepsConfig(
+            steps=list(DEFAULT_TEST_SET_PIPELINE_STEPS)
+        )
+    )
+
+
 class TargetConfig(BaseModel):
     """Which label the pipeline prepares as the model's prediction target."""
 
@@ -122,6 +150,7 @@ class DataPreparationConfig(BaseModel):
         default_factory=FeatureSelectionConfig
     )
     pipeline: PipelineStepsConfig = Field(default_factory=PipelineStepsConfig)
+    test_set: TestSetConfig = Field(default_factory=TestSetConfig)
 
 
 def load_data_preparation_config(config_path: str) -> DataPreparationConfig:

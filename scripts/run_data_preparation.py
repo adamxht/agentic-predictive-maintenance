@@ -10,7 +10,10 @@ sys.path.append(str(PROJECT_ROOT))
 from src.configs.data_pipeline_config_schema import load_data_preparation_config
 from src.exception import CustomException
 from src.logger import logging
-from src.pipeline.data_preparation_pipeline import DataPreparationPipeline
+from src.pipeline.data_preparation_pipeline import (
+    DataPreparationPipeline,
+    TestSetPreparationPipeline,
+)
 
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "configs" / "data_transformation" / "default.yaml"
 
@@ -37,10 +40,15 @@ def main() -> None:
 
     pipeline = DataPreparationPipeline(configuration)
     artifacts = pipeline.run()
-
     logging.info(
         f"Data preparation complete. Train shape: {artifacts.train_dataframe.shape}, "
         f"Validation shape: {artifacts.validation_dataframe.shape}"
+    )
+
+    test_set_artifacts = TestSetPreparationPipeline(configuration).run()
+    logging.info(
+        f"Test-set preparation complete. Test shape: "
+        f"{test_set_artifacts.test_dataframe.shape}"
     )
 
 

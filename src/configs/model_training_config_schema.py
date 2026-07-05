@@ -1,3 +1,4 @@
+import os
 from typing import Literal
 
 import yaml
@@ -49,6 +50,8 @@ class ModelConfig(BaseModel):
     fixed_params: dict = Field(default_factory=dict)
     search_space: dict[str, HyperparameterSpec] = Field(default_factory=dict)
     registered_model_name: str | None = None
+    save_locally: bool = False
+    save_model_path: str | None = None
 
 
 class ModelTrainingDataConfig(BaseModel):
@@ -126,6 +129,16 @@ class ModelTrainingConfig(BaseModel):
             if model_config.registered_model_name is None:
                 model_config.registered_model_name = (
                     f"{self.run_name}_{model_config.name}"
+                )
+        return self
+
+    @model_validator(mode="after")
+    def _apply_default_save_model_paths(self) -> "ModelTrainingConfig":
+        """Default save_model_path to trained_model/<run>/<name> when save_locally."""
+        for model_config in self.models:
+            if model_config.save_locally and model_config.save_model_path is None:
+                model_config.save_model_path = os.path.join(
+                    "trained_model", self.run_name, model_config.name
                 )
         return self
 

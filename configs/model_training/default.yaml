@@ -13,10 +13,14 @@ target:
 # Each entry gets its own Optuna study and its own MLflow run.
 # registered_model_name is optional -- if omitted, it defaults to
 # <run_name>_<model_name> in the MLflow Model Registry.
+# save_locally is opt-in (off by default) -- when true, the model is also
+# saved to save_model_path (or trained_model/<run_name>/<model_name> if unset),
+# so it can be decoupled from MLFlow.
 models:
   - name: "random_forest"
     n_trials: 100
     registered_model_name: "life_ratio_random_forest"
+    save_locally: true
     fixed_params:
       random_state: 42
       n_jobs: -1
@@ -47,6 +51,7 @@ models:
   - name: "xgboost"
     n_trials: 100
     registered_model_name: "life_ratio_xgboost"
+    save_locally: true
     fixed_params:
       random_state: 42
       n_jobs: -1

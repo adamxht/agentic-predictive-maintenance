@@ -40,8 +40,11 @@ def main() -> None:
 
     for result in results:
         logging.info(
-            f"{result.model_name}: validation metrics {result.validation_metrics}, "
-            f"plots saved to {result.plots_directory}"
+            f"{result.model_name}: validation metrics {result.validation_metrics}"
+        )
+        logging.info(
+            f"{result.model_name}: plots at {result.plots_directory}, "
+            f"local model path: {result.model_path}"
         )
 
 
