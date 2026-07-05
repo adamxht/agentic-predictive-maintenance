@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Any, Self
 
-# Some models, such as PyTorch models, do not implement the standard scikit-learn API (e.g., .fit(), .predict()). We wrap or subclass these models to provide a scikit-learn-compatible interface.
+
+# Some models (e.g. PyTorch) don't implement fit()/predict() natively, so we wrap them.
 class SklearnModelInterface(ABC):
     """Interface for models compatible with the scikit-learn API."""
 

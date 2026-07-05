@@ -1,4 +1,63 @@
+import json
+import os
+
+import joblib
 import pandas as pd
+
+from src.const import NON_FEATURE_COLUMNS
+from src.exception import CustomException
+from src.logger import logging
+
+
+def get_sensor_columns(
+    dataframe: pd.DataFrame, excluded_columns: set[str] | None = None
+) -> list[str]:
+    """Return numeric sensor columns from a dataframe, excluding identifier/target."""
+    excluded = excluded_columns if excluded_columns is not None else NON_FEATURE_COLUMNS
+    return [
+        column
+        for column in dataframe.select_dtypes(include=["number"]).columns
+        if column not in excluded
+    ]
+
+
+def save_dataframe(dataframe: pd.DataFrame, file_path: str) -> None:
+    """Save a dataframe to CSV, creating parent directories if needed."""
+    try:
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        dataframe.to_csv(file_path, index=False)
+        logging.info(f"Saved dataframe with shape {dataframe.shape} to {file_path}")
+    except Exception as error:
+        raise CustomException(str(error)) from error
+
+
+def save_object(file_path: str, object_to_save: object) -> None:
+    """Persist a Python object to disk using joblib."""
+    try:
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        joblib.dump(object_to_save, file_path)
+        logging.info(f"Saved object to {file_path}")
+    except Exception as error:
+        raise CustomException(str(error)) from error
+
+
+def load_object(file_path: str) -> object:
+    """Load a Python object previously saved with save_object."""
+    try:
+        return joblib.load(file_path)
+    except Exception as error:
+        raise CustomException(str(error)) from error
+
+
+def save_json(data: object, file_path: str) -> None:
+    """Save a JSON-serializable object to disk, creating parent directories."""
+    try:
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        with open(file_path, "w") as json_file:
+            json.dump(data, json_file, indent=2)
+        logging.info(f"Saved JSON to {file_path}")
+    except Exception as error:
+        raise CustomException(str(error)) from error
 
 
 def safe_downcast_with_check(df, datatype):

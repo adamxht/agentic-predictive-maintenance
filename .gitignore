@@ -219,3 +219,7 @@ __marimo__/
 
 # DVC
 /minio-data
+
+# Generated data preparation outputs and run logs
+/data/processed/
+/logs/

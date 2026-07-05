@@ -1,22 +1,22 @@
 import sys
-import logging
-from src.logger import logging # have to import logger to make sure errors are logged into txt files
 
-def error_message_details(error, error_detail:sys): # error_detail exist inside sys
-    _, _, exc_tb = error_detail.exc_info() # Gives info like which file, line, etc error occured 
-    file_name = exc_tb.tb_frame.f_code.co_filename # Get filename where error occured
-    error_message = "Error occured in python script name: [{0}] line number [{1}] error message [{2}]".format(
-        file_name,
-        exc_tb.tb_lineno,
-        str(error)
+
+def _build_error_message(error_message: str) -> str:
+    """Build a message that includes the file and line number of an error."""
+    _, _, exc_traceback = sys.exc_info()
+    file_name = exc_traceback.tb_frame.f_code.co_filename
+    return (
+        f"Error occurred in script [{file_name}] "
+        f"at line [{exc_traceback.tb_lineno}]: {error_message}"
     )
 
-    return error_message
 
 class CustomException(Exception):
-    def __init__(self, error_message, error_detail:sys):
-        super().__init__(error_message) # Inherits Exception class
-        self.error_message = error_message_details(error_message, error_detail=error_detail)
+    """Application exception that captures the originating file and line number."""
 
-    def __str__(self):
+    def __init__(self, error_message: str) -> None:
+        super().__init__(error_message)
+        self.error_message = _build_error_message(error_message)
+
+    def __str__(self) -> str:
         return self.error_message
