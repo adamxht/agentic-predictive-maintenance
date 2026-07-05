@@ -7,7 +7,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(PROJECT_ROOT))
 
-from src.config_schema import load_data_preparation_config
+from src.configs.data_pipeline_config_schema import load_data_preparation_config
 from src.exception import CustomException
 from src.logger import logging
 from src.pipeline.data_preparation_pipeline import DataPreparationPipeline

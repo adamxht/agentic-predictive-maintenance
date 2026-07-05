@@ -3,9 +3,9 @@ import optuna
 import pandas as pd
 from sklearn.metrics import mean_squared_error
 
+from src.configs.model_training_config_schema import HyperparameterSpec, ModelConfig
 from src.exception import CustomException
 from src.logger import logging
-from src.model_training_config_schema import HyperparameterSpec, ModelConfig
 from src.models.model_factory import ModelFactory
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)

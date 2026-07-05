@@ -4,7 +4,7 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
 from src.components import data_ingestion, feature_engineering
-from src.config_schema import DataPreparationConfig
+from src.configs.data_pipeline_config_schema import DataPreparationConfig
 from src.const import SENSOR_NAMES
 from src.exception import CustomException
 from src.logger import logging

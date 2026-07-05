@@ -7,9 +7,9 @@ import pandas as pd
 
 from src import plots
 from src.components import evaluate, explain, model_trainer
+from src.configs.model_training_config_schema import ModelConfig, ModelTrainingConfig
 from src.exception import CustomException
 from src.logger import logging
-from src.model_training_config_schema import ModelConfig, ModelTrainingConfig
 
 
 @dataclass

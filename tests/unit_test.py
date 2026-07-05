@@ -12,13 +12,13 @@ from src.components import (
     feature_engineering,
     model_trainer,
 )
-from src.config_schema import TargetConfig
-from src.exception import CustomException
-from src.model_training_config_schema import (
+from src.configs.data_pipeline_config_schema import TargetConfig
+from src.configs.model_training_config_schema import (
     HyperparameterSpec,
     ModelConfig,
     ModelTrainingConfig,
 )
+from src.exception import CustomException
 from src.models.model_factory import ModelFactory
 from src.utils import get_sensor_columns
 

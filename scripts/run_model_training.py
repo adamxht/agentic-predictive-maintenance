@@ -7,9 +7,9 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(PROJECT_ROOT))
 
+from src.configs.model_training_config_schema import load_model_training_config
 from src.exception import CustomException
 from src.logger import logging
-from src.model_training_config_schema import load_model_training_config
 from src.pipeline.training_pipeline import TrainingPipeline
 
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "configs" / "model_training" / "default.yaml"
