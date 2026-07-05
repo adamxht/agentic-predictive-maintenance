@@ -293,7 +293,7 @@ class TrainingPipeline:
                 model,
                 name="model",
                 serialization_format="cloudpickle",
-                registered_model_name=self.configuration.mlflow.registered_model_name,
+                registered_model_name=model_config.registered_model_name,
             )
 
     def _log_datasets_to_mlflow(self) -> None:

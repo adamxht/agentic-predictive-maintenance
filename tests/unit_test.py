@@ -14,7 +14,11 @@ from src.components import (
 )
 from src.config_schema import TargetConfig
 from src.exception import CustomException
-from src.model_training_config_schema import HyperparameterSpec
+from src.model_training_config_schema import (
+    HyperparameterSpec,
+    ModelConfig,
+    ModelTrainingConfig,
+)
 from src.models.model_factory import ModelFactory
 from src.utils import get_sensor_columns
 
@@ -62,6 +66,24 @@ def test_add_life_ratio_is_bounded_between_zero_and_one(raw_multi_engine_datafra
 def test_target_config_derives_column_name_from_type():
     assert TargetConfig(type="rul").column_name == "RUL"
     assert TargetConfig(type="life_ratio").column_name == "life_ratio"
+
+
+def test_model_training_config_defaults_registered_model_name_from_run_name():
+    configuration = ModelTrainingConfig(
+        run_name="my_run",
+        models=[ModelConfig(name="random_forest")],
+    )
+
+    assert configuration.models[0].registered_model_name == "my_run_random_forest"
+
+
+def test_model_training_config_respects_explicit_registered_model_name():
+    configuration = ModelTrainingConfig(
+        run_name="my_run",
+        models=[ModelConfig(name="xgboost", registered_model_name="custom_name")],
+    )
+
+    assert configuration.models[0].registered_model_name == "custom_name"
 
 
 def test_drop_unused_columns_ignores_missing_columns(raw_multi_engine_dataframe):

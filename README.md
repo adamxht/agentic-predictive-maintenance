@@ -191,6 +191,7 @@ run_name: "life_ratio_rf_xgb"
 models:
   - name: "random_forest"
     n_trials: 100
+    # registered_model_name: "life_ratio_rf_xgb_random_forest"  # optional override
     search_space:
       n_estimators: { type: "int", low: 100, high: 600 }
       # ...
@@ -202,8 +203,12 @@ binary_classification:
 mlflow:
   tracking_uri: "sqlite:///mlflow.db"
   experiment_name: "cmapss_life_ratio"
-  registered_model_name: null # set a name to register the best model
 ```
+
+Each model is registered in the MLflow Model Registry under its own name — if
+`registered_model_name` isn't set, it defaults to `<run_name>_<model_name>` (e.g.
+`life_ratio_rf_xgb_random_forest`), so RandomForest and XGBoost don't collide under one
+name. Load a registered model directly with `mlflow.pyfunc.load_model("models:/<name>/<version>")`.
 
 ### Running it
 

@@ -1,7 +1,7 @@
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from src.config_schema import TargetConfig
 from src.exception import CustomException
@@ -48,6 +48,7 @@ class ModelConfig(BaseModel):
     n_trials: int = 100
     fixed_params: dict = Field(default_factory=dict)
     search_space: dict[str, HyperparameterSpec] = Field(default_factory=dict)
+    registered_model_name: str | None = None
 
 
 class ModelTrainingDataConfig(BaseModel):
@@ -79,11 +80,10 @@ class PlotsConfig(BaseModel):
 
 
 class MLflowConfig(BaseModel):
-    """Settings for MLflow experiment tracking and model registry."""
+    """Settings for MLflow experiment tracking."""
 
     tracking_uri: str = "sqlite:///mlflow.db"
     experiment_name: str = "cmapss_life_ratio"
-    registered_model_name: str | None = None
 
 
 class ModelTrainingConfig(BaseModel):
@@ -118,6 +118,16 @@ class ModelTrainingConfig(BaseModel):
     explainability: ExplainabilityConfig = Field(default_factory=ExplainabilityConfig)
     plots: PlotsConfig = Field(default_factory=PlotsConfig)
     mlflow: MLflowConfig = Field(default_factory=MLflowConfig)
+
+    @model_validator(mode="after")
+    def _apply_default_registered_model_names(self) -> "ModelTrainingConfig":
+        """Default each model's registered_model_name to <run_name>_<model_name>."""
+        for model_config in self.models:
+            if model_config.registered_model_name is None:
+                model_config.registered_model_name = (
+                    f"{self.run_name}_{model_config.name}"
+                )
+        return self
 
 
 def load_model_training_config(config_path: str) -> ModelTrainingConfig:
