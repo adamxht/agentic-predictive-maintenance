@@ -11,9 +11,12 @@ target:
   type: "life_ratio"
 
 # Each entry gets its own Optuna study and its own MLflow run.
+# registered_model_name is optional -- if omitted, it defaults to
+# <run_name>_<model_name> in the MLflow Model Registry.
 models:
   - name: "random_forest"
     n_trials: 100
+    # registered_model_name: "life_ratio_rf_xgb_random_forest"
     fixed_params:
       random_state: 42
       n_jobs: -1
@@ -105,4 +108,3 @@ plots:
 mlflow:
   tracking_uri: "sqlite:///mlflow.db"
   experiment_name: "cmapss_life_ratio"
-  registered_model_name: null
