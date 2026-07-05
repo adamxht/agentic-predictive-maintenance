@@ -1,3 +1,6 @@
+# Columns that are identifiers/targets, not model features
+NON_FEATURE_COLUMNS = {"RUL", "life_ratio", "cycle", "engine_id"}
+
 # Sensor names from the paper
 SENSOR_NAMES = [
     "T2",  # Total temperature at fan inlet

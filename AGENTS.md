@@ -66,6 +66,22 @@ the notebook stage.
 - Prefer dependency injection (pass a config object, a model instance, a data frame) over
   functions that reach out and construct their own dependencies.
 
+### 7. Error handling and logging
+- Any function that can fail on invalid/unexpected input (I/O, external calls, non-trivial
+  pandas/sklearn operations) must catch the failure and re-raise it as
+  `src.exception.CustomException`, chained with `from error` so the original traceback is
+  preserved.
+- Use `from src.logger import logging` (not the bare stdlib `logging` module on its own)
+  for all logging; it's configured to write to both the console and the shared `logs/`
+  directory.
+- Use the right level: `INFO` for normal progress (step start/end, shapes, row counts),
+  `WARNING` for recoverable but noteworthy situations (missing values filled, zero-variance
+  features, unexpectedly large drops), `ERROR` right before a failure propagates out of a
+  function or pipeline boundary.
+- Log once per operation with an aggregate summary (a count, a list of affected columns) —
+  never inside a per-row or per-column loop. A log line per iteration turns a two-minute
+  pipeline run into an unreadable console/log file; log the total after the loop instead.
+
 ## Practical checklist before calling a change done
 
 1. `ruff format .`

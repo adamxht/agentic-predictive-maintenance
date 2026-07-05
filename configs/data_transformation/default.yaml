@@ -1,0 +1,60 @@
+# Data preparation config for the NASA CMAPSS RUL dataset.
+# The "pipeline.steps" list controls which transformations run and in what order.
+paths:
+  raw_data_path: "data/raw/train_FD001.txt"
+  processed_train_path: "data/processed/train.csv"
+  processed_validation_path: "data/processed/val.csv"
+  scaler_path: "data/processed/artifacts/scaler.pkl"
+  selected_features_path: "data/processed/artifacts/selected_features.json"
+
+# "life_ratio" (RUL / max_cycle, bounded [0, 1]) is the preferred target.
+# Set to "rul" to fall back to predicting raw remaining-cycle counts instead.
+target:
+  type: "life_ratio"
+
+train_validation_split:
+  test_size: 0.2
+  random_state: 42
+
+preprocessing:
+  # Kept identical to the step2/step3 modeling notebooks.
+  columns_to_drop:
+    - "setting_1"
+    - "setting_2"
+    - "setting_3"
+    - "T2"
+    - "P2"
+    - "farB"
+    - "Nf_dmd"
+    - "PCNfR_dmd"
+    - "Nc"
+    - "P15"
+    - "P30"
+    - "epr"
+
+# The current raw data has no missing sensor readings, but future data might.
+# Missing values are filled per engine (never across engines), ordered by cycle:
+# linear interpolation captures the sensor's trend, then forward/backward-fill
+# covers any leading/trailing gaps interpolation can't reach.
+missing_value_handling:
+  method: "interpolate_then_fill"
+
+scaling:
+  method: "standard"
+
+feature_engineering:
+  rolling_window_size: 5
+  lag_steps: [1, 2]
+
+feature_selection:
+  # target_column is derived from `target.type` above, not set separately here.
+  top_k: 10
+
+pipeline:
+  steps:
+    - "train_validation_split"
+    - "preprocessing"
+    - "missing_value_handling" # This dataset currently have no missing values, but it is still wise to add the handling in case future dataset has
+    - "scaling"
+    - "feature_engineering"
+    - "feature_selection"
