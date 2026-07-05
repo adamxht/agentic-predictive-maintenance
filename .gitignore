@@ -223,3 +223,8 @@ __marimo__/
 # Generated data preparation outputs and run logs
 /data/processed/
 /logs/
+
+# MLflow tracking store, artifacts, and generated training plots
+/mlruns/
+/mlflow.db
+/training_logs/

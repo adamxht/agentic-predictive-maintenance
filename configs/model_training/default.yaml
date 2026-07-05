@@ -1,0 +1,108 @@
+# Model training config for the NASA CMAPSS RUL / life_ratio models.
+# Consumes the processed train/val CSVs produced by the data preparation pipeline.
+run_name: "life_ratio_rf_xgb"
+
+data:
+  processed_train_path: "data/processed/train.csv"
+  processed_validation_path: "data/processed/val.csv"
+
+# Must match the target used to produce the processed data above.
+target:
+  type: "life_ratio"
+
+# Each entry gets its own Optuna study and its own MLflow run.
+models:
+  - name: "random_forest"
+    n_trials: 100
+    fixed_params:
+      random_state: 42
+      n_jobs: -1
+    search_space:
+      n_estimators:
+        type: "int"
+        low: 100
+        high: 600
+      max_depth:
+        type: "int"
+        low: 5
+        high: 100
+      min_samples_split:
+        type: "int"
+        low: 2
+        high: 20
+      min_samples_leaf:
+        type: "int"
+        low: 1
+        high: 10
+      max_features:
+        type: "categorical"
+        choices: ["sqrt", "log2", 0.5, 0.8, null]
+      bootstrap:
+        type: "categorical"
+        choices: [true, false]
+
+  - name: "xgboost"
+    n_trials: 100
+    fixed_params:
+      random_state: 42
+      n_jobs: -1
+      objective: "reg:squarederror"
+    search_space:
+      n_estimators:
+        type: "int"
+        low: 100
+        high: 500
+      max_depth:
+        type: "int"
+        low: 3
+        high: 10
+      learning_rate:
+        type: "float"
+        low: 0.01
+        high: 0.3
+        log: true
+      subsample:
+        type: "float"
+        low: 0.5
+        high: 1.0
+      colsample_bytree:
+        type: "float"
+        low: 0.5
+        high: 1.0
+      min_child_weight:
+        type: "int"
+        low: 1
+        high: 10
+      gamma:
+        type: "float"
+        low: 0.0
+        high: 5.0
+      reg_alpha:
+        type: "float"
+        low: 0.0
+        high: 5.0
+      reg_lambda:
+        type: "float"
+        low: 0.0
+        high: 5.0
+
+# life_ratio <= threshold is treated as "near failure" (positive class) for
+# precision/recall/f1/roc-auc, mirroring the notebook's business framing.
+binary_classification:
+  threshold: 0.1
+  pred_offset: 0.0
+
+# Explain model prediction using shap
+explainability:
+  sample_size: 10
+  random_state: 42
+
+# Plots are written to <output_dir>/<run_name>/<model_name>/plots/
+plots:
+  enabled: true
+  output_dir: "training_logs"
+
+mlflow:
+  tracking_uri: "sqlite:///mlflow.db"
+  experiment_name: "cmapss_life_ratio"
+  registered_model_name: null

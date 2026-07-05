@@ -8,6 +8,8 @@ A polished end-to-end machine learning project for predictive maintenance and an
 - Structured notebooks for exploratory data analysis and modeling
 - A config-driven data preprocessing pipeline that reproduces the notebooks' logic with
   adjustable knobs (target, splits, feature engineering, feature selection) via YAML
+- A config-driven model training pipeline (Optuna tuning, SHAP explainability, MLflow
+  experiment tracking and model registry) for RandomForest and XGBoost
 - DVC-based data versioning with a local MinIO remote for development
 - Modular Python utilities and configuration for repeatable experimentation
 
@@ -16,14 +18,20 @@ A polished end-to-end machine learning project for predictive maintenance and an
 ```text
 .
 ├── configs/                       # YAML configs for pipeline runs
-│   └── data_transformation/       # Data preprocessing pipeline configs
+│   ├── data_transformation/       # Data preprocessing pipeline configs
+│   └── model_training/            # Model training pipeline configs
 ├── data/                          # Versioned datasets and DVC metadata
 ├── notebooks/                     # EDA and modeling notebooks
-├── scripts/                       # Entry-point scripts (e.g. run_data_preparation.py)
+├── scripts/                       # Entry-point scripts (run_data_preparation.py, run_model_training.py)
 ├── src/                           # Reusable Python modules
-│   ├── components/                # Individual pipeline steps (ingestion, feature engineering)
-│   └── pipeline/                  # Orchestrators that chain components together
+│   ├── components/                # Individual pipeline steps (ingestion, feature engineering,
+│   │                               # model training, evaluation, explainability)
+│   ├── models/                    # Model factory + interfaces
+│   ├── pipeline/                  # Orchestrators that chain components together
+│   └── plots.py                   # Evaluation/explainability plotting functions
 ├── tests/                         # Unit tests
+├── training_logs/                 # Generated plots per training run (gitignored)
+├── mlruns/ , mlflow.db             # MLflow tracking store and artifacts (gitignored)
 ├── minio-data/                    # Local MinIO storage for development
 ├── README.md                      # Project overview and setup guide
 └── PLAN.md                        # Project planning notes
@@ -135,8 +143,7 @@ pipeline:
 
 ### Running it
 
-```bash
-conda activate jabil   # or any environment with requirements.txt installed
+```bash   # or any environment with requirements.txt installed
 python scripts/run_data_preparation.py --config configs/data_transformation/default.yaml
 ```
 
@@ -149,10 +156,82 @@ This writes (paths configurable under `paths:` in the YAML):
 Progress, warnings (e.g. missing values filled, zero-variance features), and errors are
 logged to both the console and `logs/<timestamp>.log`.
 
-### Running the tests
+## 🤖 Model training pipeline
+
+Config-driven hyperparameter tuning, evaluation, explainability, and experiment tracking,
+built on top of the processed train/val CSVs from the data preprocessing pipeline above.
+
+### What it does, per configured model (`random_forest` and `xgboost` by default)
+
+1. Runs an Optuna hyperparameter search (`n_trials` per model), fitting on train and
+   minimizing validation RMSE.
+2. Computes regression metrics (RMSE, MAE, R²) on train and validation, plus precision,
+   recall, f1, and ROC-AUC on validation by thresholding the continuous prediction into a
+   "near failure" binary label (`life_ratio <= threshold`, mirroring the notebook).
+3. Computes SHAP values for a sample of validation rows.
+4. Generates plots (below) and saves them to `training_logs/<run_name>/<model_name>/plots/`.
+5. Logs the model config, hyperparameters, train/validation metrics, dataset lineage, plots,
+   and the fitted model to MLflow, with optional Model Registry registration.
+
+Plots, written by [src/plots.py](src/plots.py):
+
+- Actual vs predicted (train and validation)
+- Train vs validation RMSE per Optuna trial (tuning convergence / overfit check)
+- SHAP beeswarm and bar plots
+- Residuals vs true value, absolute error vs cycle, mean absolute error by engine
+- Confusion matrix and ROC curve for the near-failure binary classification
+
+### Configuring a run
+
+Edit [configs/model_training/default.yaml](configs/model_training/default.yaml). Key knobs:
+
+```yaml
+run_name: "life_ratio_rf_xgb"
+
+models:
+  - name: "random_forest"
+    n_trials: 100
+    search_space:
+      n_estimators: { type: "int", low: 100, high: 600 }
+      # ...
+
+binary_classification:
+  threshold: 0.1 # life_ratio <= threshold => "near failure"
+  pred_offset: 0.0
+
+mlflow:
+  tracking_uri: "sqlite:///mlflow.db"
+  experiment_name: "cmapss_life_ratio"
+  registered_model_name: null # set a name to register the best model
+```
+
+### Running it
 
 ```bash
-conda activate jabil
+python scripts/run_model_training.py --config configs/model_training/default.yaml
+```
+
+Each model gets its own MLflow run under the configured experiment. Explore results with:
+
+```bash
+mlflow ui --backend-store-uri sqlite:///mlflow.db
+```
+
+On this dataset both models land around RMSE ≈ 0.057, R² ≈ 0.96 on the `life_ratio` scale,
+closely matching `step3_modeling_life_ratio.ipynb` — exact numbers vary run to run since the
+Optuna search isn't seeded.
+
+A single run's logged metrics and parameters:
+
+![MLflow run overview showing validation metrics and XGBoost parameters](images/mlflow_xgb.png)
+
+Comparing runs side by side (RandomForest vs. XGBoost, train and validation metrics):
+
+![MLflow training runs comparison across models](images/mlflow_compare_runs.png)
+
+## ✅ Running the tests
+
+```bash
 pytest tests/unit_test.py
 ```
 
