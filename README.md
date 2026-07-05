@@ -354,7 +354,16 @@ redirected to a temp dir, never touching `data/processed/`), then fit RandomFore
 with their real best hyperparameters (hardcoded, not re-searched) and assert the metrics
 against a baseline captured the same way. These exist to gatekeep a model before release —
 representative of actual performance, not just correctness of the code path — so they
-require `data/raw/{train,test,RUL}_FD001.txt` to be present (e.g. via `dvc pull` or git-lfs).
+require `data/raw/{train,test,RUL}_FD001.txt` to be present.
+
+> **Note:** production would have CI run `dvc pull` against a persistent remote, but this
+> project's MinIO is local-dev-only with no server for CI to reach. Since FD001 is small
+> (a few MB), it's committed directly to git as a temporary workaround.
+>
+> This is really a special case of a general pattern: real datasets are often too large
+> (>TB) for CI to ever pull, so production teams commit a small, curated fixture subset
+> instead — which must still preserve whatever structure the pipeline depends on (here,
+> complete per-engine traces, not sampled rows) to stay representative of real performance.
 
 ## 📝 Notes
 
