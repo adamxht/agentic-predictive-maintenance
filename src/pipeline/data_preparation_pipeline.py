@@ -3,22 +3,36 @@ from dataclasses import dataclass
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
-from src.components import data_ingestion, feature_engineering
+from src.components import data_ingestion, feature_engineering, test_set_ingestion
 from src.configs.data_pipeline_config_schema import DataPreparationConfig
 from src.const import SENSOR_NAMES
 from src.exception import CustomException
 from src.logger import logging
-from src.utils import get_sensor_columns, save_dataframe, save_json, save_object
+from src.utils import (
+    get_sensor_columns,
+    load_json,
+    load_object,
+    save_dataframe,
+    save_json,
+    save_object,
+)
 
 
 @dataclass
 class DataPreparationArtifacts:
     """Outputs produced by running the data preparation pipeline."""
 
-    train_dataframe: pd.DataFrame
-    validation_dataframe: pd.DataFrame
+    train_dataframe: pd.DataFrame | None = None
+    validation_dataframe: pd.DataFrame | None = None
     scaler: StandardScaler | None = None
     selected_features: list[str] | None = None
+
+
+@dataclass
+class TestSetPreparationArtifacts(DataPreparationArtifacts):
+    """Outputs produced by running the test-set preparation pipeline."""
+
+    test_dataframe: pd.DataFrame | None = None
 
 
 class DataPreparationPipeline:
@@ -160,3 +174,110 @@ class DataPreparationPipeline:
             save_object(paths.scaler_path, self.scaler)
         if self.selected_features is not None:
             save_json(self.selected_features, paths.selected_features_path)
+
+
+class TestSetPreparationPipeline:
+    """Prepares the held-out, censored CMAPSS test set for evaluation.
+
+    Reuses the scaler and selected-feature list already fitted/selected by
+    DataPreparationPipeline on the training split -- must be run after it.
+    """
+
+    def __init__(self, configuration: DataPreparationConfig) -> None:
+        self.configuration = configuration
+        self.test_dataframe: pd.DataFrame | None = None
+        self._step_registry = {
+            "test_set_ingestion": self._run_test_set_ingestion,
+            "missing_value_handling": self._run_missing_value_handling,
+            "scaling": self._run_scaling,
+            "feature_engineering": self._run_feature_engineering,
+            "feature_selection": self._run_feature_selection,
+        }
+
+    def run(self) -> TestSetPreparationArtifacts:
+        """Run the configured test-set pipeline steps in order and save the output."""
+        try:
+            for step_name in self.configuration.test_set.pipeline.steps:
+                if step_name not in self._step_registry:
+                    raise ValueError(f"Unknown test-set pipeline step: {step_name}")
+                logging.info(f"Running test-set preparation step: {step_name}")
+                self._step_registry[step_name]()
+            save_dataframe(
+                self.test_dataframe, self.configuration.test_set.processed_test_path
+            )
+            return TestSetPreparationArtifacts(test_dataframe=self.test_dataframe)
+        except Exception as error:
+            logging.error(f"Test-set preparation pipeline failed: {error}")
+            raise CustomException(str(error)) from error
+
+    def _run_test_set_ingestion(self) -> None:
+        """Load the raw censored test set and reconstruct its target column."""
+        test_set_config = self.configuration.test_set
+        raw_dataframe = data_ingestion.load_raw_sensor_readings(
+            test_set_config.raw_data_path, SENSOR_NAMES
+        )
+        terminal_rul_values = test_set_ingestion.load_raw_terminal_rul(
+            test_set_config.raw_rul_path
+        )
+        dataframe = test_set_ingestion.add_censored_remaining_useful_life(
+            raw_dataframe, terminal_rul_values
+        )
+        if self.configuration.target.type == "life_ratio":
+            dataframe = test_set_ingestion.add_censored_life_ratio(dataframe)
+            dataframe = feature_engineering.drop_unused_columns(dataframe, ["RUL"])
+
+        columns_to_drop = [
+            *self.configuration.preprocessing.columns_to_drop,
+            test_set_ingestion.TERMINAL_RUL_COLUMN,
+        ]
+        self.test_dataframe = feature_engineering.drop_unused_columns(
+            dataframe, columns_to_drop
+        )
+
+    def _run_missing_value_handling(self) -> None:
+        """Fill missing sensor values the same way as the training pipeline."""
+        if self.configuration.missing_value_handling.method != "interpolate_then_fill":
+            raise ValueError(
+                "Unsupported missing value handling method: "
+                f"{self.configuration.missing_value_handling.method}"
+            )
+        sensor_columns = get_sensor_columns(self.test_dataframe)
+        self.test_dataframe = feature_engineering.handle_missing_sensor_values(
+            self.test_dataframe, sensor_columns
+        )
+
+    def _run_scaling(self) -> None:
+        """Apply the scaler fitted on the training split; never refit on test data."""
+        if self.configuration.scaling.method != "standard":
+            raise ValueError(
+                f"Unsupported scaling method: {self.configuration.scaling.method}"
+            )
+        scaler = load_object(self.configuration.paths.scaler_path)
+        sensor_columns = get_sensor_columns(self.test_dataframe)
+        self.test_dataframe = feature_engineering.apply_sensor_scaler(
+            self.test_dataframe, scaler, sensor_columns
+        )
+
+    def _run_feature_engineering(self) -> None:
+        """Add rolling window and lag features, then drop rows with missing values."""
+        sensor_columns = get_sensor_columns(self.test_dataframe)
+        window_size = self.configuration.feature_engineering.rolling_window_size
+        lag_steps = self.configuration.feature_engineering.lag_steps
+
+        self.test_dataframe = feature_engineering.add_rolling_window_features(
+            self.test_dataframe, sensor_columns, window_size
+        )
+        self.test_dataframe = feature_engineering.add_lag_features(
+            self.test_dataframe, sensor_columns, lag_steps
+        )
+        self.test_dataframe = feature_engineering.drop_rows_with_missing_values(
+            self.test_dataframe
+        )
+
+    def _run_feature_selection(self) -> None:
+        """Apply the feature list selected on the training split; never reselect."""
+        selected_features = load_json(self.configuration.paths.selected_features_path)
+        target_column = self.configuration.target.column_name
+        self.test_dataframe = feature_engineering.apply_feature_selection(
+            self.test_dataframe, selected_features, target_column
+        )

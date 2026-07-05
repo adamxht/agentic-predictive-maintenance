@@ -58,3 +58,16 @@ pipeline:
     - "scaling"
     - "feature_engineering"
     - "feature_selection"
+
+# Separate test set pipeline because some transformation do not apply, eg. train_val_split
+test_set:
+  raw_data_path: "data/raw/test_FD001.txt"
+  raw_rul_path: "data/raw/RUL_FD001.txt"
+  processed_test_path: "data/processed/test.csv"
+  pipeline:
+    steps:
+      - "test_set_ingestion"
+      - "missing_value_handling"
+      - "scaling"
+      - "feature_engineering"
+      - "feature_selection"

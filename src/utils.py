@@ -3,6 +3,7 @@ import os
 
 import joblib
 import pandas as pd
+from tabulate import tabulate
 
 from src.const import NON_FEATURE_COLUMNS
 from src.exception import CustomException
@@ -19,6 +20,15 @@ def get_sensor_columns(
         for column in dataframe.select_dtypes(include=["number"]).columns
         if column not in excluded
     ]
+
+
+def format_metrics_table(metrics: dict[str, float]) -> str:
+    """Format a metrics dict as a human-readable table for console/log output."""
+    try:
+        rows = [(name.upper(), f"{value:.4f}") for name, value in metrics.items()]
+        return tabulate(rows, headers=["Metric", "Value"], tablefmt="fancy_grid")
+    except Exception as error:
+        raise CustomException(str(error)) from error
 
 
 def save_dataframe(dataframe: pd.DataFrame, file_path: str) -> None:
@@ -56,6 +66,15 @@ def save_json(data: object, file_path: str) -> None:
         with open(file_path, "w") as json_file:
             json.dump(data, json_file, indent=2)
         logging.info(f"Saved JSON to {file_path}")
+    except Exception as error:
+        raise CustomException(str(error)) from error
+
+
+def load_json(file_path: str) -> object:
+    """Load a JSON object previously saved with save_json."""
+    try:
+        with open(file_path) as json_file:
+            return json.load(json_file)
     except Exception as error:
         raise CustomException(str(error)) from error
 

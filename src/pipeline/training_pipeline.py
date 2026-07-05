@@ -10,6 +10,7 @@ from src.components import evaluate, explain, model_trainer
 from src.configs.model_training_config_schema import ModelConfig, ModelTrainingConfig
 from src.exception import CustomException
 from src.logger import logging
+from src.utils import save_object
 
 
 @dataclass
@@ -21,6 +22,7 @@ class ModelRunResult:
     train_metrics: dict
     validation_metrics: dict
     plots_directory: str
+    model_path: str | None = None
 
 
 @dataclass
@@ -125,6 +127,7 @@ class TrainingPipeline:
         self._log_to_mlflow(
             model_config, model, train_metrics, validation_metrics, plots_directory
         )
+        model_path = self._save_model_locally(model, model_config)
 
         return ModelRunResult(
             model_name=model_config.name,
@@ -132,7 +135,16 @@ class TrainingPipeline:
             train_metrics=train_metrics,
             validation_metrics=validation_metrics,
             plots_directory=plots_directory,
+            model_path=model_path,
         )
+
+    def _save_model_locally(self, model, model_config: ModelConfig) -> str | None:
+        """Optionally persist the fitted model locally, decoupled from MLflow."""
+        if not model_config.save_locally:
+            return None
+        model_path = os.path.join(model_config.save_model_path, "model.pkl")
+        save_object(model_path, model)
+        return model_path
 
     def _compute_metrics(
         self,
