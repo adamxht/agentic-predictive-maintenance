@@ -3,7 +3,7 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, Field, model_validator
 
-from src.config_schema import TargetConfig
+from src.configs.data_pipeline_config_schema import TargetConfig
 from src.exception import CustomException
 
 DEFAULT_RANDOM_FOREST_SEARCH_SPACE = {
