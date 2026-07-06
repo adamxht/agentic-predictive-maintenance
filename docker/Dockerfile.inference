@@ -1,0 +1,23 @@
+FROM python:3.11-slim
+
+# scikit-learn/xgboost/shap need a compiler for a couple of source builds on some platforms
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY docker/requirements_inference.txt requirements_inference.txt
+RUN pip install --no-cache-dir -U pip \
+    && pip install --no-cache-dir -r requirements_inference.txt
+
+# MUST run git lfs pull to get trained_model first
+COPY app/ app/
+COPY src/ src/
+COPY configs/ configs/
+COPY trained_model/ trained_model/
+COPY data/raw/ data/raw/
+
+EXPOSE 8000 8501
+
+CMD ["uvicorn", "app.api:app", "--host", "0.0.0.0", "--port", "8000"]

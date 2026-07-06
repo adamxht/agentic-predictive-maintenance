@@ -1,0 +1,37 @@
+# Stays at the repo root (not docker/) on purpose: the build context for both
+# Dockerfiles under docker/ is the repo root (see their `context: ..` in
+# docker/docker-compose.*.yml), and Docker looks for .dockerignore at the
+# context root, not next to the Dockerfile.
+
+# Git metadata (large, and LFS pointer resolution already happened on the host
+# via `git lfs pull` before the image is built)
+.git/
+.gitattributes
+
+# Local dev artifacts not needed to serve the API/Streamlit demo
+notebooks/
+minio-data/
+mlruns/
+monitor/
+logs/
+training_logs/
+test_logs/
+data/processed/
+
+# Python/tooling cruft
+__pycache__/
+*.py[codz]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+.mypy_cache/
+
+# Editors/OS
+.vscode/
+.idea/
+.DS_Store
+
+# Images used only in README
+images/

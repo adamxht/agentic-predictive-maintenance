@@ -1,0 +1,19 @@
+FROM python:3.11-slim
+
+# xgboost/shap/scipy/dvc need a compiler for a couple of source builds on some platforms
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -U pip \
+    && pip install --no-cache-dir -r requirements.txt
+
+# MUST run git lfs pull to get trained_model first
+COPY . .
+
+EXPOSE 8000 8501 5000
+
+CMD ["uvicorn", "app.api:app", "--host", "0.0.0.0", "--port", "8000"]
