@@ -49,7 +49,6 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument("--threshold", type=float, default=0.1)
     parser.add_argument("--pred-offset", type=float, default=0.0)
-    parser.add_argument("--run-name", type=str, default="test_eval")
     parser.add_argument("--sample-size", type=int, default=10)
     parser.add_argument("--explain-random-state", type=int, default=42)
     parser.add_argument(
@@ -99,7 +98,6 @@ def _build_settings(arguments: argparse.Namespace) -> TestSetEvaluationSettings:
         target_type=arguments.target_type,
         threshold=arguments.threshold,
         pred_offset=arguments.pred_offset,
-        run_name=arguments.run_name,
         sample_size=arguments.sample_size,
         explain_random_state=arguments.explain_random_state,
         plots_enabled=arguments.plots_enabled,

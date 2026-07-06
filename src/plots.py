@@ -116,7 +116,7 @@ def plot_error_by_cycle(cycle_values, residuals, output_path: str) -> None:
 def plot_error_by_engine(
     engine_ids, residuals, output_path: str, top_n: int = 20
 ) -> None:
-    """Plot mean absolute error per engine, showing the top_n worst engines."""
+    """Plot mean absolute error per engine, showing the top_n worst and best engines."""
     try:
         error_by_engine = (
             pd.DataFrame({"engine_id": engine_ids, "abs_error": np.abs(residuals)})
@@ -124,12 +124,23 @@ def plot_error_by_engine(
             .mean()
             .sort_values(ascending=False)
         )
-        figure, axis = plt.subplots(figsize=(10, 4))
-        error_by_engine.head(top_n).plot(kind="bar", ax=axis)
-        axis.set_title("Mean Absolute Error by Engine")
-        axis.set_ylabel("MAE")
-        axis.set_xlabel("Engine ID")
-        axis.grid(axis="y")
+        worst_engines = error_by_engine.head(top_n)
+        best_engines = error_by_engine.tail(top_n).sort_values()
+
+        figure, (worst_axis, best_axis) = plt.subplots(1, 2, figsize=(16, 4))
+        worst_engines.plot(kind="bar", ax=worst_axis, color="tab:red")
+        worst_axis.set_title(f"Top {top_n} Worst Engines")
+        worst_axis.set_ylabel("MAE")
+        worst_axis.set_xlabel("Engine ID")
+        worst_axis.grid(axis="y")
+
+        best_engines.plot(kind="bar", ax=best_axis, color="tab:green")
+        best_axis.set_title(f"Top {top_n} Best Engines")
+        best_axis.set_ylabel("MAE")
+        best_axis.set_xlabel("Engine ID")
+        best_axis.grid(axis="y")
+
+        figure.suptitle("Mean Absolute Error by Engine")
         _save_and_close(figure, output_path)
     except Exception as error:
         raise CustomException(str(error)) from error

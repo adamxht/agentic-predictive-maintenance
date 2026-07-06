@@ -92,9 +92,9 @@ After pushing, the `nasa-cmapss` bucket in the MinIO console should show the tra
 
 ## 📓 Notebooks
 
-- [notebooks/step1_eda_RUL.ipynb](notebooks/step1_eda_RUL.ipynb) — exploratory data analysis and feature understanding
-- [notebooks/step2_modeling_RUL.ipynb](notebooks/step2_modeling_RUL.ipynb) — model training and evaluation, predicting raw RUL
-- [notebooks/step3_modeling_life_ratio.ipynb](notebooks/step3_modeling_life_ratio.ipynb) — same workflow, predicting `life_ratio` (RUL normalized to [0, 1]) instead
+- [notebooks/step1_eda_RUL.ipynb](notebooks/step1_eda_RUL.ipynb) - exploratory data analysis and feature understanding
+- [notebooks/step2_modeling_RUL.ipynb](notebooks/step2_modeling_RUL.ipynb) - model training and evaluation, predicting raw RUL
+- [notebooks/step3_modeling_life_ratio.ipynb](notebooks/step3_modeling_life_ratio.ipynb) - same workflow, predicting `life_ratio` (RUL normalized to [0, 1]) instead
 
 ## 🧹 Data preprocessing pipeline
 
@@ -106,19 +106,19 @@ split only to avoid leakage into validation.
 
 ### Pipeline steps (run in the order listed in the config)
 
-1. **`train_validation_split`** — loads `data/raw/train_FD001.txt` and splits by
+1. **`train_validation_split`** - loads `data/raw/train_FD001.txt` and splits by
    `engine_id` (not by row), so no engine's cycles leak across the train/validation split.
-2. **`preprocessing`** — computes the target column (`RUL`, or `life_ratio = RUL / max_cycle`,
+2. **`preprocessing`** - computes the target column (`RUL`, or `life_ratio = RUL / max_cycle`,
    bounded [0, 1]) and drops configured columns (operating settings, redundant/constant sensors).
-3. **`missing_value_handling`** — fills missing sensor readings per engine: linear
+3. **`missing_value_handling`** - fills missing sensor readings per engine: linear
    interpolation for interior gaps, then forward/backward-fill for any leading/trailing gaps
    interpolation can't reach. The current raw data has no missing values, but this keeps the
    pipeline robust if future data does.
-4. **`scaling`** — fits a `StandardScaler` on the training split's sensor columns only, then
+4. **`scaling`** - fits a `StandardScaler` on the training split's sensor columns only, then
    applies it to both splits.
-5. **`feature_engineering`** — adds per-engine rolling-mean and lag features for each sensor,
+5. **`feature_engineering`** - adds per-engine rolling-mean and lag features for each sensor,
    then drops the rows left with missing values from the lag window.
-6. **`feature_selection`** — ranks features by `|correlation| * variance` against the target
+6. **`feature_selection`** - ranks features by `|correlation| * variance` against the target
    (fit on train only) and keeps the top-k.
 
 ### Configuring a run
@@ -156,9 +156,9 @@ python scripts/run_data_preparation.py --config configs/data_transformation/defa
 
 This writes (paths configurable under `paths:` in the YAML):
 
-- `data/processed/train.csv`, `data/processed/val.csv` — the processed splits
-- `data/processed/artifacts/scaler.pkl` — the fitted `StandardScaler`
-- `data/processed/artifacts/selected_features.json` — the selected feature names
+- `data/processed/train.csv`, `data/processed/val.csv` - the processed splits
+- `data/processed/artifacts/scaler.pkl` - the fitted `StandardScaler`
+- `data/processed/artifacts/selected_features.json` - the selected feature names
 
 Progress, warnings (e.g. missing values filled, zero-variance features), and errors are
 logged to both the console and `logs/<timestamp>.log`.
@@ -168,7 +168,7 @@ logged to both the console and `logs/<timestamp>.log`.
 The same script also prepares `data/raw/test_FD001.txt` + `data/raw/RUL_FD001.txt` into
 `data/processed/test.csv`, via the `test_set:` section of the same config. This set is
 *censored* (engines don't run to failure), so it can't reuse `train_validation_split` or
-`preprocessing` as-is — instead `test_set_ingestion` reconstructs the target from the
+`preprocessing` as-is, instead `test_set_ingestion` reconstructs the target from the
 provided terminal RUL answer key (`RUL = rul_at_last_cycle + (last_cycle - cycle)`), and
 `scaling`/`feature_selection` reuse the scaler and selected-feature list already fit/chosen
 on the training split (`paths.scaler_path` / `paths.selected_features_path`) rather than
@@ -238,7 +238,7 @@ mlflow:
   experiment_name: "cmapss_life_ratio"
 ```
 
-Each model is registered in the MLflow Model Registry under its own name — if
+Each model is registered in the MLflow Model Registry under its own name - if
 `registered_model_name` isn't set, it defaults to `<run_name>_<model_name>` (e.g.
 `life_ratio_rf_xgb_random_forest`), so RandomForest and XGBoost don't collide under one
 name. Load a registered model directly with `mlflow.pyfunc.load_model("models:/<name>/<version>")`.
@@ -260,7 +260,7 @@ mlflow ui --backend-store-uri sqlite:///mlflow.db
 ```
 
 On this dataset both models land around RMSE ≈ 0.057, R² ≈ 0.96 on the `life_ratio` scale,
-closely matching `step3_modeling_life_ratio.ipynb` — exact numbers vary run to run since the
+closely matching `step3_modeling_life_ratio.ipynb` - exact numbers vary run to run since the
 Optuna search isn't seeded.
 
 A single run's logged metrics and parameters:
@@ -275,16 +275,15 @@ Comparing runs side by side (RandomForest vs. XGBoost, train and validation metr
 
 Scores an already-trained model against `data/processed/test.csv` (produced by the data
 preprocessing pipeline above), computing the same regression + near-failure classification
-metrics and plots the training pipeline does — just on the held-out test set instead of
+metrics and plots the training pipeline does - just on the held-out test set instead of
 validation, and for one model instead of a list.
 
 The model can come from either MLflow or a local path, so this script has no MLflow
 dependency at all when using the latter:
 
 ```bash
-# From MLflow (registered model or a specific run's artifact)
+# From MLflow (registered model)
 python scripts/run_test_set_eval.py --model "models:/life_ratio_xgboost/1"
-python scripts/run_test_set_eval.py --model "runs:/<run_id>/model"
 
 # From a local path (requires save_locally: true during training)
 python scripts/run_test_set_eval.py --model trained_model/life_ratio_rf_xgb/xgboost
@@ -315,8 +314,8 @@ Metrics are printed as a table:
 ```
 
 Every setting is available as a CLI flag (`--threshold`, `--pred-offset`, `--target-type`,
-`--run-name`, `--sample-size`, `--plots-output-dir`, `--no-plots`, ...) with sensible
-defaults. An optional `--config path/to.yaml` can override any subset of them — **any field
+`--sample-size`, `--plots-output-dir`, `--no-plots`, ...) with sensible
+defaults. An optional `--config path/to.yaml` can override any subset of them - **any field
 present in that YAML takes precedence over the matching CLI flag**, so a config only needs
 to set the values it wants to change:
 
@@ -324,7 +323,6 @@ to set the values it wants to change:
 # overrides.yaml
 model: "models:/life_ratio_xgboost/1"
 threshold: 0.15
-run_name: "xgboost_test_eval"
 ```
 
 ```bash
@@ -332,9 +330,11 @@ python scripts/run_test_set_eval.py --threshold 0.1 --config overrides.yaml
 # runs with threshold=0.15 (config wins), not 0.1
 ```
 
-Plots are written to `test_logs/<run_name>/plots/` (via [src/plots.py](src/plots.py), the
-same functions the training pipeline uses), and metrics are logged to the console and
-`logs/<timestamp>.log`.
+Plots are written to `test_logs/<model>/plots/`, where `<model>` is derived from `--model`
+itself (e.g. `trained_model/life_ratio_rf_xgb/xgboost` -> `life_ratio_rf_xgb/xgboost`, or
+`models:/life_ratio_xgboost/1` -> `life_ratio_xgboost/1`) via
+[src/plots.py](src/plots.py), the same functions the training pipeline uses. Metrics are
+logged to the console and `logs/<timestamp>.log`.
 
 ## ✅ Running the tests
 
@@ -345,7 +345,7 @@ pytest tests/                     # everything
 ```
 
 **Unit tests** (`unit_test.py`) exercise individual `src/components/` functions in
-isolation with small, hand-built DataFrames — fast, no I/O, pinpoint exactly which
+isolation with small, hand-built DataFrames - fast, no I/O, pinpoint exactly which
 transformation broke.
 
 **Integration tests** (`integration_test.py`) run the real `DataPreparationPipeline` and
@@ -353,7 +353,7 @@ transformation broke.
 redirected to a temp dir, never touching `data/processed/`), then fit RandomForest/XGBoost
 with their real best hyperparameters (hardcoded, not re-searched) and assert the metrics
 against a baseline captured the same way. These exist to gatekeep a model before release —
-representative of actual performance, not just correctness of the code path — so they
+representative of actual performance, not just correctness of the code path - so they
 require `data/raw/{train,test,RUL}_FD001.txt` to be present.
 
 > **Note:** production would have CI run `dvc pull` against a persistent remote, but this
@@ -362,8 +362,40 @@ require `data/raw/{train,test,RUL}_FD001.txt` to be present.
 >
 > This is really a special case of a general pattern: real datasets are often too large
 > (>TB) for CI to ever pull, so production teams commit a small, curated fixture subset
-> instead — which must still preserve whatever structure the pipeline depends on (here,
+> instead - which must still preserve whatever structure the pipeline depends on (here,
 > complete per-engine traces, not sampled rows) to stay representative of real performance.
+
+## Preliminary results
+
+Test-set evaluation (`life_ratio` target) for both models trained on FD001:
+
+| Metric    | RandomForest | XGBoost    |
+| --------- | ------------ | ---------- |
+| RMSE      | 0.0679       | **0.0673** |
+| MAE       | 0.0480       | **0.0477** |
+| R2        | 0.9110       | **0.9127** |
+| Accuracy  | **0.9946**   | 0.9944     |
+| Precision | **0.7034**   | 0.6860     |
+| Recall    | 0.7094       | 0.7094     |
+| F1        | **0.7064**   | 0.6975     |
+| ROC AUC   | 0.9963       | **0.9971** |
+
+XGBoost edges out RandomForest on the regression metrics (RMSE, MAE, R2) and ROC AUC, while
+RandomForest is marginally better on the near-failure classification metrics (precision, F1).
+Since RUL prediction is fundamentally a regression problem, **XGBoost** is the better overall
+model here its plots are shown below.
+
+**Error by engine** - MAE per engine on the test set, worst and best:
+
+![XGBoost mean absolute error by engine](images/xgboost_error_by_engine.png)
+
+Engine 75, 25, 26 has the lowest errors. 
+
+**SHAP feature importance** - mean absolute SHAP value per feature:
+
+![XGBoost SHAP bar plot](images/xgboost_shap_bar.png)
+
+Aside from cycle, NRc_rolling_mean is the most important sensor feature, based on 10 samples.
 
 ## 📝 Notes
 
