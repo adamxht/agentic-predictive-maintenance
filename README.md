@@ -12,8 +12,12 @@ A polished end-to-end machine learning project for predictive maintenance and an
   experiment tracking and model registry) for RandomForest and XGBoost
 - A test-set evaluation entry point that scores a trained model (from MLflow or a local
   path) against the held-out CMAPSS test set, with the same metrics and plots as training
-- A stateless real-time inference API (FastAPI) and a Streamlit demo that replays the test
-  set as a live sensor feed, with SHAP explanations and a simulated sensor-drift button
+- A stateless real-time inference API (FastAPI) and a Streamlit demo that replays raw
+  engine sensor readings as a live feed, with SHAP explanations and a simulated
+  sensor-drift button
+- Two Docker Compose stacks under [docker/](docker/) -- a lean one for just the demo (Model Serving API +
+  Streamlit) and a full one that also runs this project's MinIO and MLflow services -- with
+  no local Python environment needed
 - DVC-based data versioning with a local MinIO remote for development
 - Modular Python utilities and configuration for repeatable experimentation
 
@@ -27,6 +31,7 @@ A polished end-to-end machine learning project for predictive maintenance and an
 │   ├── model_training/            # Model training pipeline configs
 │   └── deployment/                # Inference-serving config (model, DB path)
 ├── data/                          # Versioned datasets and DVC metadata
+├── docker/                        # Dockerfiles + Compose stacks (inference-only, full)
 ├── notebooks/                     # EDA and modeling notebooks
 ├── scripts/                       # Entry-point scripts (run_data_preparation.py,
 │                                  # run_model_training.py, run_test_set_eval.py)
@@ -419,6 +424,39 @@ predicted life ratio drops below `life_ratio_threshold` (set in
 the training config's near-failure threshold), the UI flags it as a predicted engine
 failure. A **drift** control forces one chosen sensor to 0.0 in every subsequent reading --
 watch its SHAP contribution and its own trend chart react in real time.
+
+### Running the demo with Docker Compose
+
+No local Python environment needed -- just Docker and the model artifacts. Everything
+Docker-related lives under [docker/](docker/); run these from the repo root:
+
+```bash
+# One-time: fetch the real trained_model/ files (see "Fetch the trained model" above)
+git lfs pull
+
+# Just the demo (api + streamlit):
+docker compose -f docker/docker-compose.inference.yml up --build
+
+# Or the whole local dev stack (also minio + mlflow):
+docker compose -f docker/docker-compose.full.yml up --build
+```
+
+Either way, open **http://localhost:8501** for the Streamlit demo. The `full` compose file
+additionally starts `minio` (http://localhost:9001, this project's DVC remote) and `mlflow`
+(http://localhost:5000, an MLflow UI for past training runs). For pure inferencing, just run the `docker-compose.inference.yaml` version.
+
+There are two Dockerfiles: [docker/Dockerfile.inference](docker/Dockerfile.inference) is a
+lean, serving-only image (built from
+[docker/requirements_inference.txt](docker/requirements_inference.txt), a trimmed dependency
+set with the DVC/Jupyter/training-only tooling stripped out) used by the `model-server` and
+`streamlit` services in *both* compose files. [docker/Dockerfile.full](docker/Dockerfile.full)
+(the whole root [requirements.txt](requirements.txt)) is only used by `mlflow`, since that
+service mirrors the local dev stack rather than serving anything. Both Dockerfiles build
+with the repo root as context (`context: ..` in the compose files), since that's where
+`.dockerignore` and the source it copies actually live. `streamlit` waits for
+`model-server`'s `/health` check before starting, via
+`INFERENCE_API_URL=http://model-server:8000` (the service name as hostname on the Compose
+network).
 
 ## ✅ Running the tests
 

@@ -1,0 +1,63 @@
+name: predictive-maintenance-full
+
+services:
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+    command: server /data --console-address ":9001"
+
+  mlflow:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.full
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow-data:/app/mlflow_data
+    command: mlflow server --backend-store-uri sqlite:////app/mlflow_data/mlflow.db --default-artifact-root /app/mlflow_data/mlruns --host 0.0.0.0 --port 5000
+
+  model-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.inference
+    ports:
+      - "8000:8000"
+    volumes:
+      - monitor-data:/app/monitor
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  streamlit:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.inference
+    command: streamlit run app/streamlit.py --server.address=0.0.0.0 --server.port=8501
+    ports:
+      - "8501:8501"
+    environment:
+      INFERENCE_API_URL: http://model-server:8000
+    depends_on:
+      model-server:
+        condition: service_healthy
+
+volumes:
+  minio-data:
+  mlflow-data:
+  monitor-data:
