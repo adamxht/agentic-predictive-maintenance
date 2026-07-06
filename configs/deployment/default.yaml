@@ -1,0 +1,15 @@
+# Serving config for the FastAPI inference app (app/api.py).
+model: "trained_model/life_ratio_rf_xgb/xgboost"
+mlflow_tracking_uri: "sqlite:///mlflow.db"
+database_path: "data/inference_log.db"
+
+life_ratio_threshold: 0.1
+
+preprocessing:
+  pipeline_steps:
+    - "missing_value_handling"
+    - "scaling"
+    - "feature_engineering"
+    - "feature_selection"
+  rolling_window_size: 5
+  lag_steps: [1, 2]
