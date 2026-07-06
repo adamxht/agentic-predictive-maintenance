@@ -42,7 +42,7 @@ A polished end-to-end machine learning project for predictive maintenance and an
 ├── training_logs/ , test_logs/    # Generated plots per run (gitignored)
 ├── mlruns/ , mlflow.db             # MLflow tracking store and artifacts (gitignored)
 ├── monitor/                       # Real-time inference log database (gitignored)
-├── trained_model/                 # Locally saved models, opt-in (gitignored)
+├── trained_model/                 # Locally saved models, opt-in (tracked via Git LFS)
 ├── minio-data/                    # Local MinIO storage for development
 ├── README.md                      # Project overview and setup guide
 └── PLAN.md                        # Project planning notes
@@ -94,6 +94,25 @@ dvc push
 After pushing, the `nasa-cmapss` bucket in the MinIO console should show the tracked data:
 
 ![MinIO object browser showing the nasa-cmapss bucket](images/minio_example.png)
+
+### 6. Fetch the trained model (Git LFS)
+
+`trained_model/` (the RandomForest/XGBoost artifacts used by the test-set evaluation script,
+the inference API, and the Streamlit demo) is tracked with [Git LFS](https://git-lfs.com),
+not DVC. Install Git LFS once per machine, then pull the actual model files:
+
+```bash
+# One-time per machine
+sudo apt install git-lfs
+git lfs install
+
+# Fetch the real content:
+git lfs pull
+```
+
+Verify it worked -- `git lfs ls-files` should list every tracked file, and
+`trained_model/life_ratio_rf_xgb/*/model.pkl` should be their real size (tens of KB+), not a
+tiny ~130-byte Git LFS pointer text file.
 
 ## 📓 Notebooks
 
