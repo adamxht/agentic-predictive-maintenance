@@ -10,7 +10,9 @@ from src.components import evaluate, explain, model_trainer
 from src.configs.model_training_config_schema import ModelConfig, ModelTrainingConfig
 from src.exception import CustomException
 from src.logger import logging
-from src.utils import save_object
+from src.utils import copy_directory_contents, save_object
+
+PREPROCESSOR_DIR_NAME = "preprocessor"
 
 
 @dataclass
@@ -139,11 +141,20 @@ class TrainingPipeline:
         )
 
     def _save_model_locally(self, model, model_config: ModelConfig) -> str | None:
-        """Optionally persist the fitted model locally, decoupled from MLflow."""
+        """Optionally persist the fitted model locally, decoupled from MLflow.
+
+        The preprocessing artifacts are copied alongside the model under a
+        `preprocessor/` subfolder, so the model folder is a single,
+        self-contained artifact.
+        """
         if not model_config.save_locally:
             return None
         model_path = os.path.join(model_config.save_model_path, "model.pkl")
         save_object(model_path, model)
+        copy_directory_contents(
+            self.configuration.data.artifacts_path,
+            os.path.join(model_config.save_model_path, PREPROCESSOR_DIR_NAME),
+        )
         return model_path
 
     def _compute_metrics(
@@ -307,6 +318,18 @@ class TrainingPipeline:
                 serialization_format="cloudpickle",
                 registered_model_name=model_config.registered_model_name,
             )
+            self._log_preprocessor_to_mlflow()
+
+    def _log_preprocessor_to_mlflow(self) -> None:
+        """Log every preprocessing artifact nested under the model artifact.
+
+        Places them at model/preprocessor/, so the logged model artifact is
+        self-contained the same way a locally saved model folder is.
+        """
+        mlflow.log_artifacts(
+            self.configuration.data.artifacts_path,
+            artifact_path=os.path.join("model", PREPROCESSOR_DIR_NAME),
+        )
 
     def _log_datasets_to_mlflow(self) -> None:
         """Log the train/validation dataset lineage (source, schema) to this run."""

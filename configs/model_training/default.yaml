@@ -5,6 +5,7 @@ run_name: "life_ratio_rf_xgb"
 data:
   processed_train_path: "data/processed/train.csv"
   processed_validation_path: "data/processed/val.csv"
+  artifacts_path: "data/processed/artifacts"
 
 # Must match the target used to produce the processed data above.
 target:

@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 
 import joblib
 import pandas as pd
@@ -55,6 +56,15 @@ def load_object(file_path: str) -> object:
     """Load a Python object previously saved with save_object."""
     try:
         return joblib.load(file_path)
+    except Exception as error:
+        raise CustomException(str(error)) from error
+
+
+def copy_directory_contents(source_directory: str, destination_directory: str) -> None:
+    """Copy every file in source_directory into destination_directory."""
+    try:
+        shutil.copytree(source_directory, destination_directory, dirs_exist_ok=True)
+        logging.info(f"Copied {source_directory} to {destination_directory}")
     except Exception as error:
         raise CustomException(str(error)) from error
 
