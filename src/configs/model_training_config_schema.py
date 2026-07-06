@@ -59,6 +59,7 @@ class ModelTrainingDataConfig(BaseModel):
 
     processed_train_path: str = "data/processed/train.csv"
     processed_validation_path: str = "data/processed/val.csv"
+    artifacts_path: str = "data/processed/artifacts"
 
 
 class BinaryClassificationConfig(BaseModel):
