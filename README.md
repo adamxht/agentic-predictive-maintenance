@@ -12,6 +12,8 @@ A polished end-to-end machine learning project for predictive maintenance and an
   experiment tracking and model registry) for RandomForest and XGBoost
 - A test-set evaluation entry point that scores a trained model (from MLflow or a local
   path) against the held-out CMAPSS test set, with the same metrics and plots as training
+- A stateless real-time inference API (FastAPI) and a Streamlit demo that replays the test
+  set as a live sensor feed, with SHAP explanations and a simulated sensor-drift button
 - DVC-based data versioning with a local MinIO remote for development
 - Modular Python utilities and configuration for repeatable experimentation
 
@@ -19,9 +21,11 @@ A polished end-to-end machine learning project for predictive maintenance and an
 
 ```text
 .
+├── app/                            # FastAPI inference service + Streamlit demo
 ├── configs/                       # YAML configs for pipeline runs
 │   ├── data_transformation/       # Data preprocessing pipeline configs
-│   └── model_training/            # Model training pipeline configs
+│   ├── model_training/            # Model training pipeline configs
+│   └── deployment/                # Inference-serving config (model, DB path)
 ├── data/                          # Versioned datasets and DVC metadata
 ├── notebooks/                     # EDA and modeling notebooks
 ├── scripts/                       # Entry-point scripts (run_data_preparation.py,
@@ -29,7 +33,7 @@ A polished end-to-end machine learning project for predictive maintenance and an
 ├── src/                           # Reusable Python modules
 │   ├── components/                # Individual pipeline steps (ingestion, feature engineering,
 │   │                               # test-set ingestion, model training/loading, evaluation,
-│   │                               # explainability)
+│   │                               # explainability, inference logging)
 │   ├── configs/                   # Pydantic config schemas + YAML loaders
 │   ├── models/                    # Model factory + interfaces
 │   ├── pipeline/                  # Orchestrators that chain components together
@@ -335,6 +339,66 @@ itself (e.g. `trained_model/life_ratio_rf_xgb/xgboost` -> `life_ratio_rf_xgb/xgb
 `models:/life_ratio_xgboost/1` -> `life_ratio_xgboost/1`) via
 [src/plots.py](src/plots.py), the same functions the training pipeline uses. Metrics are
 logged to the console and `logs/<timestamp>.log`.
+
+## 🔌 Real-time inference (API + demo)
+
+[src/pipeline/inference_pipeline.py](src/pipeline/inference_pipeline.py) turns a raw sensor
+reading window into a model-ready feature row, reusing the same
+[src/components/feature_engineering.py](src/components/feature_engineering.py) functions
+as training/evaluation. It's **stateless**: every call takes the full window of recent raw
+readings for one engine (oldest to newest) and recomputes rolling/lag features from
+scratch, holding no per-engine history between calls, the client owns that buffer. The
+scaler and selected-feature list come from the serving model's own bundled `preprocessor/`
+folder (see the "Model training pipeline" section above), not a standalone path, so a
+`model` reference is the single point of truth, fully decoupled from
+[configs/data_transformation/default.yaml](configs/data_transformation/default.yaml).
+
+### The API
+
+[app/api.py](app/api.py) exposes it over FastAPI, fully configured via
+[configs/deployment/default.yaml](configs/deployment/default.yaml) - which model to load,
+MLflow tracking URI, log database path, preprocessing steps, and the rolling-window/lag
+settings (which must match what the model was trained with):
+
+```bash
+uvicorn app.api:app --port 8000
+```
+
+- `GET /config` - the settings a client needs to build valid requests: `required_window_length`,
+  `sensor_columns`, `selected_features`.
+- `POST /predict` - body is `{"engine_id": int, "readings": [{"cycle": int, "values": {...}}, ...]}`;
+  returns the predicted `life_ratio` plus a per-feature SHAP breakdown for that cycle.
+- `GET /health` - liveness check.
+
+Every prediction is logged to a SQLite database (`data/inference_log.db` by default) via
+[src/components/inference_store.py](src/components/inference_store.py): a wide
+`inference_readings` table (raw, unscaled sensor values + prediction, one row per cycle) for
+plotting, and a long/normalized `inference_shap_values` table (one row per feature per
+prediction) so an LLM agent can query SHAP trends with plain SQL later without pivoting.
+That's the intended next step this design sets up for - an agent that watches this database
+for drift and explains it via SHAP - but it's out of scope here; this piece only covers the
+inference pipeline, API, and demo.
+
+### The demo
+
+[app/streamlit.py](app/streamlit.py) replays three engines (75, 25, 26) as a live feed (1
+cycle every N seconds, adjustable in the UI, defaulting to 10s) against the API. It reads
+them from the raw *training* file rather than the test set, because the test set is
+censored - e.g. engine 75 only has data up to cycle 88 in the test set - so it never
+actually reaches failure. The training file has each engine's full, uncensored run to
+actual failure:
+
+```bash
+streamlit run app/streamlit.py
+```
+
+It shows the live predicted life-ratio, a SHAP bar chart for the current cycle, and each raw
+sensor's trend as its own small chart (unscaled, so actual magnitudes are visible). When the
+predicted life ratio drops below `life_ratio_threshold` (set in
+[configs/deployment/default.yaml](configs/deployment/default.yaml), default `0.1`, matching
+the training config's near-failure threshold), the UI flags it as a predicted engine
+failure. A **drift** control forces one chosen sensor to 0.0 in every subsequent reading --
+watch its SHAP contribution and its own trend chart react in real time.
 
 ## ✅ Running the tests
 

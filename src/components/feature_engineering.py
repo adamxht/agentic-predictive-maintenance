@@ -1,3 +1,5 @@
+import re
+
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
@@ -6,6 +8,8 @@ from src.logger import logging
 
 ENGINE_ID_COLUMN = "engine_id"
 CYCLE_COLUMN = "cycle"
+ROLLING_MEAN_SUFFIX = "_roll_mean"
+LAG_SUFFIX_PATTERN = re.compile(r"_lag\d+$")
 
 
 def add_remaining_useful_life(dataframe: pd.DataFrame) -> pd.DataFrame:
@@ -169,15 +173,48 @@ def select_top_features(
 
 
 def apply_feature_selection(
-    dataframe: pd.DataFrame, selected_features: list[str], target_column: str
+    dataframe: pd.DataFrame,
+    selected_features: list[str],
+    target_column: str | None = None,
 ) -> pd.DataFrame:
-    """Keep only the selected features plus the target and engine/cycle identifiers."""
+    """Keep only the selected features plus identifiers, and the target if given.
+
+    target_column is optional because inference-time data has no target to
+    keep -- that's what's being predicted.
+    """
     try:
         identifier_columns = [CYCLE_COLUMN, ENGINE_ID_COLUMN]
         feature_and_identifier_columns = list(
             dict.fromkeys(selected_features + identifier_columns)
         )
-        columns_to_keep = [target_column, *feature_and_identifier_columns]
+        columns_to_keep = (
+            feature_and_identifier_columns
+            if target_column is None
+            else [target_column, *feature_and_identifier_columns]
+        )
         return dataframe[columns_to_keep].copy()
+    except Exception as error:
+        raise CustomException(str(error)) from error
+
+
+def derive_base_sensor_names(selected_features: list[str]) -> list[str]:
+    """Return the base raw sensor names underlying a model's selected features.
+
+    Strips the `_roll_mean`/`_lagN` suffixes add_rolling_window_features/
+    add_lag_features add, and drops identifier columns (cycle/engine_id can
+    themselves rank as selected features but aren't sensors). Used to know
+    which raw sensors a model actually relies on for prediction, without the
+    derived rolling/lag variants.
+    """
+    try:
+        identifier_columns = {CYCLE_COLUMN, ENGINE_ID_COLUMN}
+        base_names = []
+        for feature_name in selected_features:
+            if feature_name in identifier_columns:
+                continue
+            base_name = LAG_SUFFIX_PATTERN.sub("", feature_name)
+            base_name = base_name.removesuffix(ROLLING_MEAN_SUFFIX)
+            base_names.append(base_name)
+        return list(dict.fromkeys(base_names))
     except Exception as error:
         raise CustomException(str(error)) from error

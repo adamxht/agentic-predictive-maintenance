@@ -1,8 +1,11 @@
+import sqlite3
+
 import numpy as np
 import optuna
 import pandas as pd
 import pytest
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import StandardScaler
 from xgboost import XGBRegressor
 
 from src.components import (
@@ -10,9 +13,11 @@ from src.components import (
     evaluate,
     explain,
     feature_engineering,
+    inference_store,
     model_trainer,
 )
 from src.configs.data_pipeline_config_schema import TargetConfig
+from src.configs.inference_config_schema import InferencePreprocessingConfig
 from src.configs.model_training_config_schema import (
     HyperparameterSpec,
     ModelConfig,
@@ -20,6 +25,10 @@ from src.configs.model_training_config_schema import (
 )
 from src.exception import CustomException
 from src.models.model_factory import ModelFactory
+from src.pipeline.inference_pipeline import (
+    InferencePipeline,
+    derive_required_sensor_columns,
+)
 from src.utils import get_sensor_columns
 
 
@@ -350,3 +359,176 @@ def test_sample_features_for_explanation_caps_to_available_rows():
     )
 
     assert len(sample) == 3
+
+
+def test_apply_feature_selection_without_target_column_omits_target(
+    raw_multi_engine_dataframe,
+):
+    result_dataframe = feature_engineering.apply_feature_selection(
+        raw_multi_engine_dataframe, selected_features=["T24"]
+    )
+
+    assert set(result_dataframe.columns) == {"T24", "cycle", "engine_id"}
+
+
+def test_derive_base_sensor_names_strips_lag_and_rolling_suffixes():
+    selected_features = [
+        "cycle",
+        "engine_id",
+        "NRc",
+        "NRc_lag1",
+        "BPR",
+        "NRc_lag2",
+        "BPR_lag1",
+        "BPR_lag2",
+        "NRc_roll_mean",
+        "W31",
+    ]
+
+    base_sensor_names = feature_engineering.derive_base_sensor_names(selected_features)
+
+    assert base_sensor_names == ["NRc", "BPR", "W31"]
+
+
+@pytest.fixture
+def inference_window_dataframe() -> pd.DataFrame:
+    """Three consecutive raw readings for one engine, including a dropped column."""
+    return pd.DataFrame(
+        {
+            "engine_id": [1, 1, 1],
+            "cycle": [1, 2, 3],
+            "setting_1": [0.1, 0.2, 0.3],
+            "T24": [10.0, 20.0, 30.0],
+            "T30": [100.0, 200.0, 300.0],
+        }
+    )
+
+
+@pytest.fixture
+def fitted_sensor_scaler() -> StandardScaler:
+    """A scaler pre-fit on the two sensor columns used by inference_window_dataframe."""
+    scaler = StandardScaler()
+    scaler.fit(pd.DataFrame({"T24": [10.0, 20.0, 30.0], "T30": [100.0, 200.0, 300.0]}))
+    return scaler
+
+
+def _build_inference_configuration(
+    rolling_window_size: int, lag_steps: list[int]
+) -> InferencePreprocessingConfig:
+    return InferencePreprocessingConfig(
+        rolling_window_size=rolling_window_size, lag_steps=lag_steps
+    )
+
+
+def test_derive_required_sensor_columns_matches_scaler_fit_columns(
+    fitted_sensor_scaler,
+):
+    required_sensor_columns = derive_required_sensor_columns(fitted_sensor_scaler)
+
+    assert required_sensor_columns == ["T24", "T30"]
+
+
+def test_inference_pipeline_returns_latest_cycle_feature_row(
+    inference_window_dataframe, fitted_sensor_scaler
+):
+    configuration = _build_inference_configuration(rolling_window_size=2, lag_steps=[1])
+    pipeline = InferencePipeline(
+        configuration, fitted_sensor_scaler, selected_features=["T24", "T24_lag1"]
+    )
+
+    feature_row = pipeline.run(inference_window_dataframe)
+
+    assert feature_row["cycle"] == 3
+    assert set(feature_row.index) == {"cycle", "engine_id", "T24", "T24_lag1"}
+
+
+def test_inference_pipeline_exposes_unscaled_raw_snapshot(
+    inference_window_dataframe, fitted_sensor_scaler
+):
+    configuration = _build_inference_configuration(rolling_window_size=2, lag_steps=[1])
+    pipeline = InferencePipeline(
+        configuration, fitted_sensor_scaler, selected_features=["T24"]
+    )
+
+    pipeline.run(inference_window_dataframe)
+
+    assert pipeline.raw_dataframe["T24"].tolist() == [10.0, 20.0, 30.0]
+    assert "setting_1" not in pipeline.raw_dataframe.columns
+
+
+def test_inference_pipeline_raises_when_window_too_short(fitted_sensor_scaler):
+    configuration = _build_inference_configuration(
+        rolling_window_size=5, lag_steps=[1, 2]
+    )
+    single_row_window = pd.DataFrame(
+        {
+            "engine_id": [1],
+            "cycle": [1],
+            "setting_1": [0.1],
+            "T24": [10.0],
+            "T30": [100.0],
+        }
+    )
+    pipeline = InferencePipeline(
+        configuration, fitted_sensor_scaler, selected_features=["T24"]
+    )
+
+    with pytest.raises(CustomException):
+        pipeline.run(single_row_window)
+
+
+def test_initialize_database_creates_expected_tables(tmp_path):
+    database_path = str(tmp_path / "inference_log.db")
+
+    inference_store.initialize_database(database_path, sensor_columns=["T24", "T30"])
+
+    with sqlite3.connect(database_path) as connection:
+        table_names = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+    assert {"inference_readings", "inference_shap_values"}.issubset(table_names)
+
+
+def test_log_inference_reading_inserts_expected_row(tmp_path):
+    database_path = str(tmp_path / "inference_log.db")
+    inference_store.initialize_database(database_path, sensor_columns=["T24", "T30"])
+
+    inference_store.log_inference_reading(
+        database_path,
+        engine_id=75,
+        cycle=10,
+        sensor_readings={"T24": 641.8, "T30": 1589.7},
+        predicted_life_ratio=0.42,
+    )
+
+    with sqlite3.connect(database_path) as connection:
+        connection.row_factory = sqlite3.Row
+        row = connection.execute("SELECT * FROM inference_readings").fetchone()
+
+    assert row["engine_id"] == 75
+    assert row["cycle"] == 10
+    assert row["T24"] == pytest.approx(641.8)
+    assert row["predicted_life_ratio"] == pytest.approx(0.42)
+
+
+def test_log_shap_values_inserts_one_row_per_feature(tmp_path):
+    database_path = str(tmp_path / "inference_log.db")
+    inference_store.initialize_database(database_path, sensor_columns=["T24", "T30"])
+
+    inference_store.log_shap_values(
+        database_path,
+        engine_id=75,
+        cycle=10,
+        shap_values={"T24": 0.05, "T30": -0.02},
+    )
+
+    with sqlite3.connect(database_path) as connection:
+        rows = connection.execute(
+            "SELECT feature_name, shap_value FROM inference_shap_values "
+            "ORDER BY feature_name"
+        ).fetchall()
+
+    assert rows == [("T24", pytest.approx(0.05)), ("T30", pytest.approx(-0.02))]
