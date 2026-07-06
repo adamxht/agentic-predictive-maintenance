@@ -19,7 +19,6 @@ class TestEvaluationOverridesConfig(BaseModel):
     target_type: Literal["rul", "life_ratio"] | None = None
     threshold: float | None = None
     pred_offset: float | None = None
-    run_name: str | None = None
     sample_size: int | None = None
     explain_random_state: int | None = None
     plots_enabled: bool | None = None

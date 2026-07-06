@@ -21,7 +21,6 @@ class TestSetEvaluationSettings:
     target_type: str
     threshold: float
     pred_offset: float
-    run_name: str
     sample_size: int
     explain_random_state: int
     plots_enabled: bool
@@ -56,8 +55,11 @@ class TestSetEvaluationPipeline:
             test_predictions = model.predict(test_features)
 
             metrics = self._compute_metrics(test_target, test_predictions)
+            model_identifier = model_loader.derive_model_identifier(
+                self.settings.model_reference
+            )
             plots_directory = os.path.join(
-                self.settings.plots_output_dir, self.settings.run_name, "plots"
+                self.settings.plots_output_dir, model_identifier, "plots"
             )
             if self.settings.plots_enabled:
                 self._generate_plots(
