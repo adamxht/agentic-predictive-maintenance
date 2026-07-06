@@ -14,10 +14,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DATA_CONFIG_PATH = REPO_ROOT / "configs" / "data_transformation" / "default.yaml"
 
 RANDOM_FOREST_BEST_PARAMS = {
-    "n_estimators": 506,
+    "n_estimators": 447,
     "max_depth": 10,
-    "min_samples_split": 12,
-    "min_samples_leaf": 5,
+    "min_samples_split": 17,
+    "min_samples_leaf": 8,
     "max_features": 0.5,
     "bootstrap": True,
     "random_state": 42,
@@ -25,15 +25,15 @@ RANDOM_FOREST_BEST_PARAMS = {
 }
 
 XGBOOST_BEST_PARAMS = {
-    "n_estimators": 429,
-    "max_depth": 3,
-    "learning_rate": 0.03665501997287406,
-    "subsample": 0.9092241232809276,
-    "colsample_bytree": 0.7348757570871771,
-    "min_child_weight": 8,
-    "gamma": 0.0018367384131046677,
-    "reg_alpha": 1.0161496361514495,
-    "reg_lambda": 3.5876902317258796,
+    "n_estimators": 369,
+    "max_depth": 5,
+    "learning_rate": 0.15465998746633278,
+    "subsample": 0.6135451690005006,
+    "colsample_bytree": 0.7455306127714851,
+    "min_child_weight": 9,
+    "gamma": 0.04919857761786995,
+    "reg_alpha": 0.6748439844247618,
+    "reg_lambda": 0.41907927448580273,
     "random_state": 42,
     "n_jobs": -1,
     "objective": "reg:squarederror",
@@ -128,10 +128,10 @@ def test_random_forest_pipeline_matches_baseline(prepared_real_datasets):
     )
 
     # Hard coded baselines
-    assert validation_metrics["rmse"] == pytest.approx(0.0575, rel=0.15)
-    assert validation_metrics["r2"] == pytest.approx(0.959, abs=0.05)
-    assert test_metrics["rmse"] == pytest.approx(0.0672, rel=0.15)
-    assert test_metrics["r2"] == pytest.approx(0.913, abs=0.05)
+    assert validation_metrics["rmse"] == pytest.approx(0.0571, rel=0.15)
+    assert validation_metrics["r2"] == pytest.approx(0.960, abs=0.05)
+    assert test_metrics["rmse"] == pytest.approx(0.0668, rel=0.15)
+    assert test_metrics["r2"] == pytest.approx(0.914, abs=0.05)
 
 
 def test_xgboost_pipeline_matches_baseline(prepared_real_datasets):
@@ -145,7 +145,7 @@ def test_xgboost_pipeline_matches_baseline(prepared_real_datasets):
     )
 
     # Hard coded baselines
-    assert validation_metrics["rmse"] == pytest.approx(0.0566, rel=0.15)
-    assert validation_metrics["r2"] == pytest.approx(0.961, abs=0.05)
-    assert test_metrics["rmse"] == pytest.approx(0.0673, rel=0.15)
-    assert test_metrics["r2"] == pytest.approx(0.913, abs=0.05)
+    assert validation_metrics["rmse"] == pytest.approx(0.0568, rel=0.15)
+    assert validation_metrics["r2"] == pytest.approx(0.960, abs=0.05)
+    assert test_metrics["rmse"] == pytest.approx(0.0667, rel=0.15)
+    assert test_metrics["r2"] == pytest.approx(0.914, abs=0.05)

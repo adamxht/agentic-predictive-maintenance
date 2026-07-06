@@ -24,13 +24,12 @@ import streamlit as st
 
 from src.components import data_ingestion, feature_engineering
 from src.configs.data_pipeline_config_schema import load_data_preparation_config
-from src.const import SENSOR_NAMES
 from src.logger import logging
 
 API_BASE_URL = os.environ.get("INFERENCE_API_URL", "http://localhost:8000")
 DATA_CONFIG_PATH = "configs/data_transformation/default.yaml"
 DEMO_ENGINE_IDS = [75, 25, 26]
-DEFAULT_CYCLE_DURATION_SECONDS = 10
+DEFAULT_CYCLE_DURATION_SECONDS = 1
 MIN_CYCLE_DURATION_SECONDS = 1
 MAX_CYCLE_DURATION_SECONDS = 120
 
@@ -47,7 +46,7 @@ def load_demo_engine_data() -> dict[int, pd.DataFrame]:
     """
     data_config = load_data_preparation_config(DATA_CONFIG_PATH)
     raw_dataframe = data_ingestion.load_raw_sensor_readings(
-        data_config.paths.raw_data_path, SENSOR_NAMES
+        data_config.paths.raw_data_path
     )
     demo_dataframe = raw_dataframe[raw_dataframe["engine_id"].isin(DEMO_ENGINE_IDS)]
     return {

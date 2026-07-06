@@ -1,23 +1,24 @@
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
+from src.const import CYCLE_COLUMN, ENGINE_ID_COLUMN, RAW_COLUMN_NAMES
 from src.exception import CustomException
 from src.logger import logging
 
-ENGINE_ID_COLUMN = "engine_id"
-CYCLE_COLUMN = "cycle"
 
+def load_raw_sensor_readings(file_path: str) -> pd.DataFrame:
+    """Load whitespace-delimited raw CMAPSS sensor readings into a dataframe.
 
-def load_raw_sensor_readings(file_path: str, sensor_columns: list[str]) -> pd.DataFrame:
-    """Load whitespace-delimited raw CMAPSS sensor readings into a dataframe."""
+    Reads the full, fixed raw file layout (src.const.RAW_COLUMN_NAMES): unit,
+    cycle, 3 operational settings, then 21 sensor columns.
+    """
     try:
-        columns = [ENGINE_ID_COLUMN, CYCLE_COLUMN, *sensor_columns]
         dataframe = pd.read_csv(
             file_path,
             sep=r"\s+",
             header=None,
-            usecols=range(len(columns)),
-            names=columns,
+            usecols=range(len(RAW_COLUMN_NAMES)),
+            names=RAW_COLUMN_NAMES,
             engine="python",
         )
         logging.info(

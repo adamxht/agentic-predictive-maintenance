@@ -23,6 +23,7 @@ from src.configs.model_training_config_schema import (
     ModelConfig,
     ModelTrainingConfig,
 )
+from src.const import OPERATIONAL_SETTING_NAMES, SENSOR_NAMES
 from src.exception import CustomException
 from src.models.model_factory import ModelFactory
 from src.pipeline.inference_pipeline import (
@@ -239,6 +240,31 @@ def test_apply_feature_selection_keeps_identifier_columns(raw_multi_engine_dataf
     )
 
     assert set(result_dataframe.columns) == {"RUL", "T24", "cycle", "engine_id"}
+
+
+def test_load_raw_sensor_readings_reads_settings_and_all_21_sensors(tmp_path):
+    """Regression test for a column-offset bug: raw files have unit, cycle, 3
+    operational settings, then 21 sensors (26 columns total). Omitting the
+    settings from the read previously shifted every sensor name 3 positions
+    and silently dropped the last two sensors entirely.
+    """
+    raw_values = [1, 5, 0.1, 0.2, 100.0, *range(1, 22)]
+    raw_file = tmp_path / "raw.txt"
+    raw_file.write_text(" ".join(str(value) for value in raw_values) + "\n")
+
+    result_dataframe = data_ingestion.load_raw_sensor_readings(str(raw_file))
+
+    assert list(result_dataframe.columns) == [
+        "engine_id",
+        "cycle",
+        *OPERATIONAL_SETTING_NAMES,
+        *SENSOR_NAMES,
+    ]
+    assert result_dataframe.loc[0, "engine_id"] == 1
+    assert result_dataframe.loc[0, "cycle"] == 5
+    assert result_dataframe.loc[0, "setting_3"] == 100.0
+    assert result_dataframe.loc[0, SENSOR_NAMES[0]] == 1
+    assert result_dataframe.loc[0, SENSOR_NAMES[-1]] == 21
 
 
 def test_split_train_validation_by_engine_has_no_engine_overlap(

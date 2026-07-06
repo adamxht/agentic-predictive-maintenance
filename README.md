@@ -324,21 +324,21 @@ Metrics are printed as a table:
 ╒═══════════╤═════════╕
 │ Metric    │   Value │
 ╞═══════════╪═════════╡
-│ RMSE      │  0.0679 │
+│ RMSE      │  0.0667 │
 ├───────────┼─────────┤
-│ MAE       │  0.048  │
+│ MAE       │  0.0479 │
 ├───────────┼─────────┤
-│ R2        │  0.911  │
+│ R2        │  0.9142 │
 ├───────────┼─────────┤
-│ ACCURACY  │  0.9946 │
+│ ACCURACY  │  0.9947 │
 ├───────────┼─────────┤
-│ PRECISION │  0.7034 │
+│ PRECISION │  0.7025 │
 ├───────────┼─────────┤
-│ RECALL    │  0.7094 │
+│ RECALL    │  0.7265 │
 ├───────────┼─────────┤
-│ F1        │  0.7064 │
+│ F1        │  0.7143 │
 ├───────────┼─────────┤
-│ ROC_AUC   │  0.9963 │
+│ ROC_AUC   │  0.9968 │
 ╘═══════════╧═════════╛
 ```
 
@@ -493,31 +493,32 @@ Test-set evaluation (`life_ratio` target) for both models trained on FD001:
 
 | Metric    | RandomForest | XGBoost    |
 | --------- | ------------ | ---------- |
-| RMSE      | 0.0679       | **0.0673** |
-| MAE       | 0.0480       | **0.0477** |
-| R2        | 0.9110       | **0.9127** |
-| Accuracy  | **0.9946**   | 0.9944     |
-| Precision | **0.7034**   | 0.6860     |
-| Recall    | 0.7094       | 0.7094     |
-| F1        | **0.7064**   | 0.6975     |
-| ROC AUC   | 0.9963       | **0.9971** |
+| RMSE      | 0.0668       | **0.0667** |
+| MAE       | **0.0476**   | 0.0479     |
+| R2        | 0.9140       | **0.9142** |
+| Accuracy  | 0.9946       | **0.9947** |
+| Precision | **0.7117**   | 0.7025     |
+| Recall    | 0.6752       | **0.7265** |
+| F1        | 0.6930       | **0.7143** |
+| ROC AUC   | 0.9968       | 0.9968     |
 
-XGBoost edges out RandomForest on the regression metrics (RMSE, MAE, R2) and ROC AUC, while
-RandomForest is marginally better on the near-failure classification metrics (precision, F1).
-Since RUL prediction is fundamentally a regression problem, **XGBoost** is the better overall
-model here its plots are shown below.
+XGBoost edges out RandomForest on RMSE, R2, and the near-failure classification metrics
+(recall, F1), while RandomForest is marginally better on MAE and precision. Since RUL
+prediction is fundamentally a regression problem, **XGBoost** is the better overall model
+here -- its plots are shown below.
 
 **Error by engine** - MAE per engine on the test set, worst and best:
 
 ![XGBoost mean absolute error by engine](images/xgboost_error_by_engine.png)
 
-Engine 75, 25, 26 has the lowest errors. 
+Engines 25, 75, and 26 have the lowest errors.
 
 **SHAP feature importance** - mean absolute SHAP value per feature:
 
 ![XGBoost SHAP bar plot](images/xgboost_shap_bar.png)
 
-Aside from cycle, NRc_rolling_mean is the most important sensor feature, based on 10 samples.
+Aside from `cycle`, `Ps30` (static pressure at HPC outlet) is the most important sensor
+feature, based on 10 samples.
 
 ## 📝 Notes
 
