@@ -1,5 +1,9 @@
-# Columns that are identifiers/targets, not model features
-NON_FEATURE_COLUMNS = {"RUL", "life_ratio", "cycle", "engine_id"}
+ENGINE_ID_COLUMN = "engine_id"
+CYCLE_COLUMN = "cycle"
+
+NON_FEATURE_COLUMNS = {"RUL", "life_ratio", CYCLE_COLUMN, ENGINE_ID_COLUMN}
+
+OPERATIONAL_SETTING_NAMES = ["setting_1", "setting_2", "setting_3"]
 
 # Sensor names from the paper
 SENSOR_NAMES = [
@@ -24,4 +28,12 @@ SENSOR_NAMES = [
     "PCNfR_dmd",  # Demanded corrected fan speed
     "W31",  # High-pressure turbine coolant bleed
     "W32",  # Low-pressure turbine coolant bleed
+]
+
+# Full raw CMAPSS file column layout
+RAW_COLUMN_NAMES = [
+    ENGINE_ID_COLUMN,
+    CYCLE_COLUMN,
+    *OPERATIONAL_SETTING_NAMES,
+    *SENSOR_NAMES,
 ]

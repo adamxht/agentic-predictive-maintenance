@@ -5,7 +5,6 @@ from sklearn.preprocessing import StandardScaler
 
 from src.components import data_ingestion, feature_engineering, test_set_ingestion
 from src.configs.data_pipeline_config_schema import DataPreparationConfig
-from src.const import SENSOR_NAMES
 from src.exception import CustomException
 from src.logger import logging
 from src.utils import (
@@ -75,7 +74,7 @@ class DataPreparationPipeline:
     def _run_train_validation_split(self) -> None:
         """Load the raw sensor readings and split them into train/validation splits."""
         raw_dataframe = data_ingestion.load_raw_sensor_readings(
-            self.configuration.paths.raw_data_path, SENSOR_NAMES
+            self.configuration.paths.raw_data_path
         )
         split_config = self.configuration.train_validation_split
         self.train_dataframe, self.validation_dataframe = (
@@ -214,7 +213,7 @@ class TestSetPreparationPipeline:
         """Load the raw censored test set and reconstruct its target column."""
         test_set_config = self.configuration.test_set
         raw_dataframe = data_ingestion.load_raw_sensor_readings(
-            test_set_config.raw_data_path, SENSOR_NAMES
+            test_set_config.raw_data_path
         )
         terminal_rul_values = test_set_ingestion.load_raw_terminal_rul(
             test_set_config.raw_rul_path
