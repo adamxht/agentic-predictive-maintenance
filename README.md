@@ -41,6 +41,7 @@ A polished end-to-end machine learning project for predictive maintenance and an
 ├── tests/                         # Unit tests + in-memory integration tests
 ├── training_logs/ , test_logs/    # Generated plots per run (gitignored)
 ├── mlruns/ , mlflow.db             # MLflow tracking store and artifacts (gitignored)
+├── monitor/                       # Real-time inference log database (gitignored)
 ├── trained_model/                 # Locally saved models, opt-in (gitignored)
 ├── minio-data/                    # Local MinIO storage for development
 ├── README.md                      # Project overview and setup guide
@@ -370,7 +371,7 @@ uvicorn app.api:app --port 8000
   returns the predicted `life_ratio` plus a per-feature SHAP breakdown for that cycle.
 - `GET /health` - liveness check.
 
-Every prediction is logged to a SQLite database (`data/inference_log.db` by default) via
+Every prediction is logged to a SQLite database (`monitor/inference_log.db` by default) via
 [src/components/inference_store.py](src/components/inference_store.py): a wide
 `inference_readings` table (raw, unscaled sensor values + prediction, one row per cycle) for
 plotting, and a long/normalized `inference_shap_values` table (one row per feature per

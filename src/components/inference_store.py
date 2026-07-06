@@ -1,3 +1,4 @@
+import os
 import sqlite3
 from datetime import UTC, datetime
 
@@ -17,6 +18,9 @@ def initialize_database(database_path: str, sensor_columns: list[str]) -> None:
     (e.g. average SHAP per feature over a cycle range) without pivoting.
     """
     try:
+        database_directory = os.path.dirname(database_path)
+        if database_directory:
+            os.makedirs(database_directory, exist_ok=True)
         sensor_column_definitions = ", ".join(
             f'"{column}" REAL' for column in sensor_columns
         )
