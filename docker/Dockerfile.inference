@@ -20,4 +20,4 @@ COPY data/raw/ data/raw/
 
 EXPOSE 8000 8501
 
-CMD ["uvicorn", "app.api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "src.serving.api:app", "--host", "0.0.0.0", "--port", "8000"]

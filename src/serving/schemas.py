@@ -1,4 +1,4 @@
-"""Pydantic request/response schemas for the inference API (app/api.py)."""
+"""Pydantic request/response schemas for the inference API (src/serving/api.py)."""
 
 from pydantic import BaseModel, Field
 

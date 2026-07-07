@@ -30,7 +30,7 @@ A polished end-to-end machine learning project for predictive maintenance and an
 
 ```text
 .
-├── app/                            # FastAPI inference service + Streamlit demo (+ copilot.py)
+├── app/                            # Streamlit demo (+ copilot.py)
 ├── configs/                       # YAML configs for pipeline runs
 │   ├── data_transformation/       # Data preprocessing pipeline configs
 │   ├── model_training/            # Model training pipeline configs
@@ -51,6 +51,8 @@ A polished end-to-end machine learning project for predictive maintenance and an
 │   ├── configs/                   # Pydantic config schemas + YAML loaders
 │   ├── models/                    # Model factory + interfaces
 │   ├── pipeline/                  # Orchestrators that chain components together
+│   ├── serving/                   # FastAPI inference service (api.py, schemas.py,
+│   │                               # request_helpers.py)
 │   └── plots.py                   # Evaluation/explainability plotting functions
 ├── src_agent/                     # Diagnostic Copilot: MCP analytics server, LangChain
 │                                  # agent API, and the multimodal RAG pipeline
@@ -391,13 +393,13 @@ folder (see the "Model training pipeline" section above), not a standalone path,
 
 ### The API
 
-[app/api.py](app/api.py) exposes it over FastAPI, fully configured via
+[src/serving/api.py](src/serving/api.py) exposes it over FastAPI, fully configured via
 [configs/deployment/default.yaml](configs/deployment/default.yaml) - which model to load,
 MLflow tracking URI, log database path, preprocessing steps, and the rolling-window/lag
 settings (which must match what the model was trained with):
 
 ```bash
-uvicorn app.api:app --port 8000
+uvicorn src.serving.api:app --port 8000
 ```
 
 - `GET /config` - the settings a client needs to build valid requests: `required_window_length`,
@@ -411,7 +413,7 @@ Every prediction is logged to a SQLite database (`monitor/inference_log.db` by d
 `inference_readings` table (raw, unscaled sensor values + prediction, one row per cycle) for
 plotting, and a long/normalized `inference_shap_values` table (one row per feature per
 prediction) so an LLM agent can query SHAP trends with plain SQL later without pivoting.
-[app/api.py](app/api.py) also appends a structured line per prediction to
+[src/serving/api.py](src/serving/api.py) also appends a structured line per prediction to
 `monitor/logs/<YYYY-MM-DD_HH>.log` via
 [src/components/deployment_logger.py](src/components/deployment_logger.py) -- a plain-text
 deployment history for ops tooling. It's not part of the Diagnostic Copilot's knowledge base

@@ -28,7 +28,7 @@ class InferencePreprocessingConfig(BaseModel):
 
 
 class InferenceServingConfig(BaseModel):
-    """Settings for the FastAPI inference service (app/api.py).
+    """Settings for the FastAPI inference service (src/serving/api.py).
 
     Fully self-contained: unlike the test-set evaluation script, this does
     not read configs/data_transformation/default.yaml -- a deployed service

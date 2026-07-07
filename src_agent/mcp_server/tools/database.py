@@ -7,7 +7,7 @@ from src.exception import CustomException
 
 MISSING_DATABASE_HINT = (
     "Inference log database not found at '{path}'. It is created by the "
-    "inference API (app/api.py) on its first prediction -- run the demo first."
+    "inference API (src/serving/api.py) on its first prediction -- run the demo first."
 )
 
 

@@ -11,12 +11,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 
-from app.schemas import PredictionRequest, PredictionResponse, ServingConfigResponse
-from app.serving import (
-    build_raw_window_dataframe,
-    compute_required_window_length,
-    compute_shap_values_dict,
-)
 from src.components import deployment_logger, inference_store, model_loader
 from src.configs.inference_config_schema import load_inference_serving_config
 from src.exception import CustomException
@@ -25,6 +19,16 @@ from src.pipeline.inference_pipeline import (
     CYCLE_COLUMN,
     ENGINE_ID_COLUMN,
     InferencePipeline,
+)
+from src.serving.request_helpers import (
+    build_raw_window_dataframe,
+    compute_required_window_length,
+    compute_shap_values_dict,
+)
+from src.serving.schemas import (
+    PredictionRequest,
+    PredictionResponse,
+    ServingConfigResponse,
 )
 
 SERVING_CONFIG_PATH = os.environ.get(
