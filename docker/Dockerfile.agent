@@ -1,0 +1,21 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY docker/requirements_agent.txt requirements_agent.txt
+RUN pip install --no-cache-dir -U pip \
+    && pip install --no-cache-dir -r requirements_agent.txt
+
+# src_agent/ only imports src.const/src.exception/src.logger (no ML deps),
+# so copying all of src/ costs nothing but keeps this in sync automatically.
+COPY src_agent/ src_agent/
+COPY src/ src/
+COPY configs/ configs/
+COPY README.md README.md
+COPY rag_documents/ rag_documents/
+
+EXPOSE 8200 8300
+
+# Default: the agent API. The mcp-server service overrides `command:` in
+# docker-compose to run src_agent.mcp_server.server against this same image.
+CMD ["uvicorn", "src_agent.api:app", "--host", "0.0.0.0", "--port", "8300"]

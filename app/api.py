@@ -17,7 +17,7 @@ from app.serving import (
     compute_required_window_length,
     compute_shap_values_dict,
 )
-from src.components import inference_store, model_loader
+from src.components import deployment_logger, inference_store, model_loader
 from src.configs.inference_config_schema import load_inference_serving_config
 from src.exception import CustomException
 from src.logger import logging
@@ -110,6 +110,14 @@ def predict(request: PredictionRequest) -> PredictionResponse:
             cycle,
             shap_values,
         )
+        deployment_logger.log_prediction_event(
+            app.state.serving_config.deployment_log_directory,
+            request.engine_id,
+            cycle,
+            sensor_readings,
+            predicted_life_ratio,
+            app.state.serving_config.life_ratio_threshold,
+        )
         return PredictionResponse(
             engine_id=request.engine_id,
             cycle=cycle,
@@ -120,4 +128,16 @@ def predict(request: PredictionRequest) -> PredictionResponse:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except Exception as error:
         logging.error(f"Prediction failed: {error}")
+        raise HTTPException(status_code=500, detail=str(error)) from error
+
+
+@app.delete("/engines/{engine_id}")
+def reset_engine(engine_id: int) -> dict[str, str]:
+    """Clear one engine's logged history, e.g. when a client restarts its run."""
+    try:
+        inference_store.delete_engine_history(
+            app.state.serving_config.database_path, engine_id
+        )
+        return {"status": "ok"}
+    except CustomException as error:
         raise HTTPException(status_code=500, detail=str(error)) from error

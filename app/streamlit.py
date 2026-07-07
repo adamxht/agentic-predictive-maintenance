@@ -22,6 +22,7 @@ import pandas as pd
 import requests
 import streamlit as st
 
+from app.copilot import render_copilot_panel
 from src.components import data_ingestion, feature_engineering
 from src.configs.data_pipeline_config_schema import load_data_preparation_config
 from src.logger import logging
@@ -64,7 +65,20 @@ def fetch_serving_config(api_base_url: str) -> dict:
 
 
 def _initialize_session_state() -> None:
-    """Set up per-engine simulation state on first load only."""
+    """Set up per-engine simulation state on first load only.
+
+    Also clears every demo engine's logged history on the inference API,
+    the same way "Reset engine" does -- otherwise a fresh browser
+    session/app restart would still report a prior session's furthest
+    cycle for "latest" queries (e.g. the Diagnostic Copilot's), since the
+    log database persists across restarts by design (see _reset_engine).
+
+    TODO: this wipes shared engine 75/25/26 history for everyone, so a
+    second concurrent user opening a new tab clears the first user's
+    in-progress run. Fine for solo demo/interview use; revisit (e.g.
+    per-session engine ids, or drop the auto-clear) if this is ever used
+    by multiple people at once.
+    """
     if "initialized" in st.session_state:
         return
     st.session_state.initialized = True
@@ -80,6 +94,7 @@ def _initialize_session_state() -> None:
     st.session_state.last_advance_time = {}
     for engine_id in DEMO_ENGINE_IDS:
         _reset_engine_state(engine_id)
+        _clear_logged_engine_history(engine_id)
 
 
 def _reset_engine_state(engine_id: int) -> None:
@@ -92,10 +107,34 @@ def _reset_engine_state(engine_id: int) -> None:
     st.session_state.last_advance_time[engine_id] = 0.0
 
 
+def _clear_logged_engine_history(engine_id: int) -> None:
+    """Clear one engine's persisted history on the inference API.
+
+    Fails open (a local-only reset still happens) since a briefly
+    unreachable inference API shouldn't block the rest of the page --
+    the failure is surfaced via last_error instead.
+    """
+    try:
+        response = requests.delete(f"{API_BASE_URL}/engines/{engine_id}", timeout=5)
+        response.raise_for_status()
+    except requests.RequestException as error:
+        st.session_state.last_error[engine_id] = (
+            f"Reset locally, but could not clear logged history: {error}"
+        )
+
+
 def _reset_engine(engine_id: int) -> None:
-    """Reset one engine's state and stop the simulation."""
+    """Reset one engine's state (local and logged) and stop the simulation.
+
+    Also clears the engine's logged history on the inference API so a
+    fresh run doesn't inherit a prior run's cycles -- without this, tools
+    that read "latest cycle" from the log (e.g. the Diagnostic Copilot's)
+    would keep reporting the previous run's furthest cycle instead of the
+    new one's, since cycle numbers restart from 1 on every run.
+    """
     _reset_engine_state(engine_id)
     st.session_state.is_running = False
+    _clear_logged_engine_history(engine_id)
 
 
 def _call_predict_api(engine_id: int, window: list[dict]) -> None:
@@ -117,14 +156,17 @@ def _call_predict_api(engine_id: int, window: list[dict]) -> None:
 
 
 def _advance_one_cycle(
-    engine_id: int, sensor_columns: list[str], required_window_length: int
+    engine_id: int,
+    sensor_columns: list[str],
+    required_window_length: int,
+    life_ratio_threshold: float,
 ) -> None:
     """Send the next cycle's reading (with any active drift applied) to the API."""
     source_dataframe = st.session_state.engine_dataframes[engine_id]
     pointer = st.session_state.cycle_pointer[engine_id]
     if pointer >= len(source_dataframe):
         st.session_state.is_running = False
-        return
+        st.rerun()
 
     row = source_dataframe.iloc[pointer]
     reading_values = {column: float(row[column]) for column in sensor_columns}
@@ -142,6 +184,24 @@ def _advance_one_cycle(
         {"cycle": cycle_number, **reading_values}
     )
     st.session_state.cycle_pointer[engine_id] = pointer + 1
+    _stop_if_failure_predicted(engine_id, life_ratio_threshold)
+
+
+def _stop_if_failure_predicted(engine_id: int, life_ratio_threshold: float) -> None:
+    """Stop the simulation once a prediction drops below the failure threshold.
+
+    st.rerun() (scope="app" by default) forces a full rerun rather than just
+    this fragment's, so the Start/Stop button -- rendered outside the
+    fragment -- immediately relabels to "Start" too. Without it the button
+    would keep showing "Stop" until some unrelated interaction triggers a
+    full rerun, and clicking it would toggle is_running back on.
+    """
+    predictions = st.session_state.predictions[engine_id]
+    if not predictions:
+        return
+    if predictions[-1]["predicted_life_ratio"] < life_ratio_threshold:
+        st.session_state.is_running = False
+        st.rerun()
 
 
 def _advance_one_cycle_if_due(
@@ -149,6 +209,7 @@ def _advance_one_cycle_if_due(
     sensor_columns: list[str],
     required_window_length: int,
     cycle_duration_seconds: float,
+    life_ratio_threshold: float,
 ) -> None:
     """Advance one cycle only if a full interval has actually elapsed.
 
@@ -161,7 +222,9 @@ def _advance_one_cycle_if_due(
     if now - last_advance_time < cycle_duration_seconds:
         return
     st.session_state.last_advance_time[engine_id] = now
-    _advance_one_cycle(engine_id, sensor_columns, required_window_length)
+    _advance_one_cycle(
+        engine_id, sensor_columns, required_window_length, life_ratio_threshold
+    )
 
 
 def _render_controls(plotted_sensor_columns: list[str]) -> None:
@@ -281,10 +344,7 @@ def _render_feature_trends(engine_id: int, plotted_sensor_columns: list[str]) ->
     if not raw_history:
         return
 
-    st.caption(
-        "Raw sensor trends (unscaled, model-used sensors only, y-axis zoomed to "
-        "each sensor's own range)"
-    )
+    st.caption("Raw sensor trends (Only the sensors used by the model are plotted)")
     raw_dataframe = pd.DataFrame(raw_history)
     columns_per_row = 3
     for row_start in range(0, len(plotted_sensor_columns), columns_per_row):
@@ -311,6 +371,7 @@ def _live_section(
             sensor_columns,
             required_window_length,
             st.session_state.cycle_duration_seconds,
+            life_ratio_threshold,
         )
     _render_prediction(engine_id, life_ratio_threshold)
     _render_feature_trends(engine_id, plotted_sensor_columns)
@@ -320,9 +381,7 @@ def main() -> None:
     """Wire up the CMAPSS real-time inference demo Streamlit app."""
     st.title("Real-Time Predictive Maintenance Demo")
     st.caption(
-        "Replays raw engine readings (which run to actual failure) as a live "
-        "sensor feed against the stateless inference API, one simulated cycle every "
-        "N seconds (configurable)."
+        "Replays raw engine readings as a live sensor feed."
     )
 
     try:
@@ -343,19 +402,25 @@ def main() -> None:
     required_window_length = serving_config["required_window_length"]
     life_ratio_threshold = serving_config["life_ratio_threshold"]
 
-    _render_controls(plotted_sensor_columns)
+    feed_tab, copilot_tab = st.tabs(["Live feed", "Diagnostic Copilot"])
 
-    # Re-wrapped every rerun so the fragment's auto-refresh interval always
-    # reflects the current "Seconds per cycle" control.
-    live_section = st.fragment(run_every=st.session_state.cycle_duration_seconds)(
-        _live_section
-    )
-    live_section(
-        sensor_columns,
-        plotted_sensor_columns,
-        required_window_length,
-        life_ratio_threshold,
-    )
+    with feed_tab:
+        _render_controls(plotted_sensor_columns)
+
+        # Re-wrapped every rerun so the fragment's auto-refresh interval always
+        # reflects the current "Seconds per cycle" control.
+        live_section = st.fragment(run_every=st.session_state.cycle_duration_seconds)(
+            _live_section
+        )
+        live_section(
+            sensor_columns,
+            plotted_sensor_columns,
+            required_window_length,
+            life_ratio_threshold,
+        )
+
+    with copilot_tab:
+        render_copilot_panel()
 
 
 if __name__ == "__main__":

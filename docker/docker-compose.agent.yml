@@ -1,0 +1,124 @@
+# Full demo including the Diagnostic Copilot: inference (model-server +
+# streamlit) plus mcp-server, agent-server, and chroma. No LLM tracing --
+# see docker-compose.agent-tracing.yml for the variant that adds OpenLIT.
+#
+# Ollama itself is not containerized; it keeps running on the host and is
+# reached from agent-server via host.docker.internal. OPENAI_API_KEY (for
+# the default OpenAI backend and knowledge_search's embeddings) is loaded
+# from the repo-root .env via agent-server's env_file -- missing that file
+# is fine (required: false), it just means the OpenAI backend needs a
+# per-request key from the UI instead.
+#
+# monitor/ is bind-mounted (not a named volume) so inference_log.db and the
+# deployment .log files are visible/tailable on the host in real time and
+# match the same relative path bare-metal runs use.
+name: predictive-maintenance-agent
+
+services:
+  model-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.inference
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../monitor:/app/monitor
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  streamlit:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.inference
+    command: streamlit run app/streamlit.py --server.address=0.0.0.0 --server.port=8501
+    ports:
+      - "8501:8501"
+    environment:
+      INFERENCE_API_URL: http://model-server:8000
+      AGENT_API_URL: http://agent-server:8300
+    depends_on:
+      model-server:
+        condition: service_healthy
+
+  mcp-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.agent
+    command: ["python", "-m", "src_agent.mcp_server.server"]
+    ports:
+      - "8200:8200"
+    environment:
+      AGENT_CONFIG_PATH: configs/agent/docker.yaml
+    volumes:
+      - ../monitor:/app/monitor
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import socket; socket.create_connection(('localhost', 8200), 2)",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  chroma:
+    image: chromadb/chroma
+    ports:
+      - "8100:8000"
+    volumes:
+      - chroma-data:/data
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8000"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  agent-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.agent
+    env_file:
+      - path: ../.env # repo-root .env, e.g. OPENAI_API_KEY -- optional, see below
+        required: false
+    ports:
+      - "8300:8300"
+    environment:
+      AGENT_CONFIG_PATH: configs/agent/docker.yaml
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # harmless on Docker Desktop, needed on native Linux
+    volumes:
+      - ../monitor:/app/monitor
+    depends_on:
+      mcp-server:
+        condition: service_healthy
+      chroma:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8300/health')",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  chroma-data:

@@ -2,6 +2,7 @@
 model: "trained_model/life_ratio_rf_xgb/xgboost"
 mlflow_tracking_uri: "sqlite:///mlflow.db"
 database_path: "monitor/inference_log.db"
+deployment_log_directory: "monitor/logs" # hourly <YYYY-MM-DD_HH>.log prediction logs
 
 life_ratio_threshold: 0.1
 

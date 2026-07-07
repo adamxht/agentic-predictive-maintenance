@@ -38,6 +38,7 @@ class InferenceServingConfig(BaseModel):
     model: str
     mlflow_tracking_uri: str = "sqlite:///mlflow.db"
     database_path: str = "monitor/inference_log.db"
+    deployment_log_directory: str = "monitor/logs"
     life_ratio_threshold: float = 0.1
     preprocessing: InferencePreprocessingConfig = Field(
         default_factory=InferencePreprocessingConfig

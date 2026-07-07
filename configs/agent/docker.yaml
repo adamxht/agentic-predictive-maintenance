@@ -1,0 +1,17 @@
+# Overrides for running the Diagnostic Copilot services under Docker Compose
+# (docker-compose.agent.yml / docker-compose.agent-tracing.yml): only the
+# fields that need service-name hostnames instead of localhost. Every other
+# field falls back to its class default in src_agent/config.py, which
+# already matches configs/agent/default.yaml's values. Ollama itself is not
+# containerized -- it keeps running on the host, reached via
+# host.docker.internal (Docker Desktop's built-in host alias).
+agent_api:
+  mcp_server_url: "http://mcp-server:8200/mcp"
+
+backends:
+  ollama:
+    base_url: "http://host.docker.internal:11434"
+
+rag:
+  chroma_host: "chroma"
+  chroma_port: 8000 # the chroma container's own listen port, not its 8100 host mapping
