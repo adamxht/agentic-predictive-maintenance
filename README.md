@@ -110,8 +110,18 @@ Streamlit demo, and the Diagnostic Copilot agent + RAG)*
 │   ├── serving/                   # FastAPI inference service (api.py, schemas.py,
 │   │                               # request_helpers.py)
 │   └── plots.py                   # Evaluation/explainability plotting functions
-├── src_agent/                     # Diagnostic Copilot: MCP analytics server, LangChain
-│                                  # agent API, and the multimodal RAG pipeline
+├── src_agent/                     # Diagnostic Copilot: MCP server, LangChain agent, RAG
+│   ├── api.py                     # FastAPI agent service (SSE chat endpoint)
+│   ├── agent.py                   # LangChain tool-calling agent + event streaming
+│   ├── config.py                  # Pydantic config schemas + YAML loader
+│   ├── prompts.py                 # Diagnostic Copilot system prompt
+│   ├── channels.py                # Splits tool output: model text vs UI-only side channel
+│   ├── schemas.py                 # Request/response schemas
+│   ├── tracing.py                 # OpenLIT tracing init
+│   ├── backends/                  # OpenAI / Ollama chat + embedding model builders
+│   ├── mcp_server/                # FastMCP server + six analytics tools (server.py, tools/)
+│   └── rag/                       # Knowledge-base ingestion + retrieval (readers,
+│                                  # splitters, ingestion_pipeline.py, retrieval_pipeline.py)
 ├── tests/                         # Unit tests + in-memory integration tests + agents_test.py
 ├── training_logs/ , test_logs/    # Generated plots per run (gitignored)
 ├── mlruns/ , mlflow.db             # MLflow tracking store and artifacts (gitignored)
