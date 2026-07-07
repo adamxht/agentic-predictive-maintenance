@@ -1,6 +1,6 @@
 """Minute-rotated deployment log shared by the inference API and the agent.
 
-Every prediction (app/api.py) and every chat turn (src_agent/api.py) appends
+Every prediction (src/serving/api.py) and every chat turn (src_agent/api.py) appends
 one structured, human-readable line to <log_directory>/<YYYY-MM-DD_HH_MM>.log.
 Plain text keeps the deployment history consumable by ops tooling and the
 RAG knowledge base without touching either service's SQLite store, and

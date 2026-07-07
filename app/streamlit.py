@@ -1,5 +1,5 @@
 """Streamlit demo: replays raw sensor readings as a live feed against the
-stateless inference API (app/api.py), one simulated cycle at a time. Shows
+stateless inference API (src/serving/api.py), one simulated cycle at a time. Shows
 the model's live life-ratio prediction, SHAP feature importance, and raw
 (unscaled) sensor trends -- plus a button to simulate sensor drift.
 

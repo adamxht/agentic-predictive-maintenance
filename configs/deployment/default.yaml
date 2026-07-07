@@ -1,4 +1,4 @@
-# Serving config for the FastAPI inference app (app/api.py).
+# Serving config for the FastAPI inference app (src/serving/api.py).
 model: "trained_model/life_ratio_rf_xgb/xgboost"
 mlflow_tracking_uri: "sqlite:///mlflow.db"
 database_path: "monitor/inference_log.db"

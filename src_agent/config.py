@@ -163,9 +163,10 @@ class AgentServiceConfig(BaseModel):
 
     database_path: str = "monitor/inference_log.db"
     training_statistics_path: str = "configs/agent/training_statistics.json"
-    # Same directory app/api.py writes prediction events to, and RagConfig's
-    # default document_paths scans -- chat and prediction history end up in
-    # the same rotating log files, one shared deployment record for RAG.
+    # Same directory src/serving/api.py writes prediction events to. Not
+    # part of RagConfig's default document_paths (see DEFAULT_DOCUMENT_PATHS
+    # below) -- chat and prediction history share these rotating log files,
+    # and indexing them would let the copilot cite its own past answers.
     deployment_log_directory: str = "monitor/logs"
     life_phase_bands: LifePhaseBandsConfig = Field(default_factory=LifePhaseBandsConfig)
     sql_tool: SqlToolConfig = Field(default_factory=SqlToolConfig)

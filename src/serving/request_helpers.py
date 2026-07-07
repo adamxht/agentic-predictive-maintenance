@@ -1,14 +1,14 @@
 """Request-building and response-shaping helpers for the inference API.
 
-Kept separate from app/api.py so that module only holds route handlers and
-the app's lifespan.
+Kept separate from src/serving/api.py so that module only holds route
+handlers and the app's lifespan.
 """
 
 import pandas as pd
 
-from app.schemas import PredictionRequest
 from src.components import explain
 from src.pipeline.inference_pipeline import CYCLE_COLUMN, ENGINE_ID_COLUMN
+from src.serving.schemas import PredictionRequest
 
 
 def compute_required_window_length(
