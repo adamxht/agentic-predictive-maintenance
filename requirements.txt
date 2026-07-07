@@ -138,6 +138,7 @@ pexpect==4.9.0
 pillow==12.3.0
 platformdirs==4.10.0
 pluggy==1.6.0
+pre-commit==4.6.0
 prettytable==3.18.0
 prompt_toolkit==3.0.52
 propcache==0.5.2
