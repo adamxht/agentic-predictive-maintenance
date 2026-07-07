@@ -129,7 +129,9 @@ def render_copilot_panel() -> None:
     # st.tabs() tab, where chat_input renders inline rather than pinned to
     # the viewport) so it stays put at the top instead of drifting further
     # down the page as the conversation grows.
-    question = st.chat_input("Ask about an engine - e.g. 'What is the status of engine 75?'")
+    question = st.chat_input(
+        "Ask about an engine - e.g. 'What is the status of engine 75?'"
+    )
 
     # autoscroll=True (rather than the height+chat_message auto-detect
     # default) so the box reliably jumps to the newest message instead of

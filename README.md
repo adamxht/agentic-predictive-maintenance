@@ -1,6 +1,6 @@
 # Agentic Predictive Maintenance
 
-A polished end-to-end machine learning project for predictive maintenance and anomaly detection using the NASA CMAPSS dataset. The repository combines data science, MLOps, and an LLM-friendly workflow for exploring descriptive, diagnostic, and predictive analytics.
+A polished end-to-end machine learning project for predictive maintenance and anomaly detection using the NASA CMAPSS dataset. The repository combines data science, MLOps, and a Agentic/Generative AI workflow for exploring descriptive, diagnostic, and predictive analytics.
 
 ## ✨ What this project includes
 
@@ -611,6 +611,19 @@ require `data/raw/{train,test,RUL}_FD001.txt` to be present.
 > (>TB) for CI to ever pull, so production teams commit a small, curated fixture subset
 > instead - which must still preserve whatever structure the pipeline depends on (here,
 > complete per-engine traces, not sampled rows) to stay representative of real performance.
+
+## 🧹 Linting
+
+`ruff check .` runs in CI (see [.github/workflows/tests.yml](.github/workflows/tests.yml)).
+To catch violations locally before they reach CI, install the
+[pre-commit](.pre-commit-config.yaml) hook once per clone:
+
+```bash
+pip install -r requirements.txt   # includes pre-commit
+pre-commit install
+```
+
+Every `git commit` then runs `ruff check` against the files you've staged.
 
 ## Preliminary results
 
