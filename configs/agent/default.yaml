@@ -1,0 +1,53 @@
+database_path: "monitor/inference_log.db"
+training_statistics_path: "configs/agent/training_statistics.json"
+
+life_phase_bands:
+  early_minimum_life_ratio: 0.7 # predicted life_ratio above => early life
+  late_maximum_life_ratio: 0.3 # predicted life_ratio below => late life
+
+sql_tool:
+  allowed_tables:
+    - "inference_readings"
+    - "inference_shap_values"
+  max_rows: 200
+
+drift_tool:
+  default_window_size: 20
+  z_score_alert_threshold: 4.0
+
+mcp_server:
+  host: "0.0.0.0"
+  port: 8200
+
+agent_api:
+  host: "0.0.0.0"
+  port: 8300
+  mcp_server_url: "http://localhost:8200/mcp"
+  recursion_limit: 25
+
+backends:
+  default: "openai"
+  openai:
+    model: "gpt-5-mini"
+    caption_model: "gpt-5-mini" # vision model used once, at knowledge-base ingest time
+    embedder: "text-embedding-3-small"
+  ollama:
+    model: "qwen3.5:9b"
+    base_url: "http://localhost:11434"
+    embedder: "qwen3-embedding:4b"
+    caption_model: "qwen3.5:9b" # TODO: Enable this
+
+rag:
+  enabled: true
+  chroma_host: "localhost"
+  chroma_port: 8100
+  collection_name: "cmapss_knowledge"
+  top_k: 4
+  document_paths:
+    - "rag_documents"
+    - "README.md"
+
+tracing:
+  enabled: false
+  otlp_endpoint: "http://localhost:4318"
+  application_name: "diagnostic-copilot"

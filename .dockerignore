@@ -1,4 +1,4 @@
-# Stays at the repo root (not docker/) on purpose: the build context for both
+# Stays at the repo root (not docker/) on purpose: the build context for all
 # Dockerfiles under docker/ is the repo root (see their `context: ..` in
 # docker/docker-compose.*.yml), and Docker looks for .dockerignore at the
 # context root, not next to the Dockerfile.
@@ -32,6 +32,3 @@ venv/
 .vscode/
 .idea/
 .DS_Store
-
-# Images used only in README
-images/

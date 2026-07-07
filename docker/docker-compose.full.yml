@@ -30,7 +30,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - monitor-data:/app/monitor
+      - ../monitor:/app/monitor
     healthcheck:
       test:
         [
@@ -60,4 +60,3 @@ services:
 volumes:
   minio-data:
   mlflow-data:
-  monitor-data:

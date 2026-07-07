@@ -2,8 +2,15 @@ import sys
 
 
 def _build_error_message(error_message: str) -> str:
-    """Build a message that includes the file and line number of an error."""
+    """Build a message that includes the file and line number of an error.
+
+    When raised outside an except block (a direct validation error rather
+    than a re-raise) there is no active exception, so the message is
+    returned as-is.
+    """
     _, _, exc_traceback = sys.exc_info()
+    if exc_traceback is None:
+        return error_message
     file_name = exc_traceback.tb_frame.f_code.co_filename
     return (
         f"Error occurred in script [{file_name}] "

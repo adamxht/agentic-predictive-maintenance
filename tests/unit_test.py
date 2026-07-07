@@ -558,3 +558,31 @@ def test_log_shap_values_inserts_one_row_per_feature(tmp_path):
         ).fetchall()
 
     assert rows == [("T24", pytest.approx(0.05)), ("T30", pytest.approx(-0.02))]
+
+
+def test_delete_engine_history_clears_only_that_engine(tmp_path):
+    database_path = str(tmp_path / "inference_log.db")
+    inference_store.initialize_database(database_path, sensor_columns=["T24"])
+    for engine_id in (75, 25):
+        inference_store.log_inference_reading(
+            database_path,
+            engine_id,
+            cycle=1,
+            sensor_readings={"T24": 641.8},
+            predicted_life_ratio=0.9,
+        )
+        inference_store.log_shap_values(
+            database_path, engine_id, cycle=1, shap_values={"T24": 0.05}
+        )
+
+    inference_store.delete_engine_history(database_path, engine_id=75)
+
+    with sqlite3.connect(database_path) as connection:
+        remaining_readings = connection.execute(
+            "SELECT engine_id FROM inference_readings"
+        ).fetchall()
+        remaining_shap_values = connection.execute(
+            "SELECT engine_id FROM inference_shap_values"
+        ).fetchall()
+    assert remaining_readings == [(25,)]
+    assert remaining_shap_values == [(25,)]

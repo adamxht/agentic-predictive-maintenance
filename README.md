@@ -15,9 +15,14 @@ A polished end-to-end machine learning project for predictive maintenance and an
 - A stateless real-time inference API (FastAPI) and a Streamlit demo that replays raw
   engine sensor readings as a live feed, with SHAP explanations and a simulated
   sensor-drift button
-- Two Docker Compose stacks under [docker/](docker/) -- a lean one for just the demo (Model Serving API +
-  Streamlit) and a full one that also runs this project's MinIO and MLflow services -- with
-  no local Python environment needed
+- An optional **Diagnostic Copilot** agent ([src_agent/](src_agent/)) -- an MCP analytics
+  server + LangChain tool-calling agent + multimodal RAG that lets an operator ask the
+  inference log trust-calibrated questions ("can I trust this prediction?"), backed by
+  OpenAI or a local Ollama model, with optional OpenLIT tracing
+- Four Docker Compose stacks under [docker/](docker/) -- a lean one for just the inference
+  demo, a full one that also runs this project's MinIO and MLflow services, and two that add
+  the Diagnostic Copilot (with and without LLM tracing) -- with no local Python environment
+  needed
 - DVC-based data versioning with a local MinIO remote for development
 - Modular Python utilities and configuration for repeatable experimentation
 
@@ -25,28 +30,34 @@ A polished end-to-end machine learning project for predictive maintenance and an
 
 ```text
 .
-├── app/                            # FastAPI inference service + Streamlit demo
+├── app/                            # FastAPI inference service + Streamlit demo (+ copilot.py)
 ├── configs/                       # YAML configs for pipeline runs
 │   ├── data_transformation/       # Data preprocessing pipeline configs
 │   ├── model_training/            # Model training pipeline configs
-│   └── deployment/                # Inference-serving config (model, DB path)
+│   ├── deployment/                # Inference-serving config (model, DB path)
+│   └── agent/                     # Diagnostic Copilot config (default.yaml, docker.yaml,
+│                                  # precomputed training_statistics.json)
 ├── data/                          # Versioned datasets and DVC metadata
-├── docker/                        # Dockerfiles + Compose stacks (inference-only, full)
+├── docker/                        # Dockerfiles + Compose stacks (inference, full, agent,
+│                                  # agent-tracing)
 ├── notebooks/                     # EDA and modeling notebooks
 ├── scripts/                       # Entry-point scripts (run_data_preparation.py,
-│                                  # run_model_training.py, run_test_set_eval.py)
+│                                  # run_model_training.py, run_test_set_eval.py,
+│                                  # run_training_stats.py, run_rag_ingest.py)
 ├── src/                           # Reusable Python modules
 │   ├── components/                # Individual pipeline steps (ingestion, feature engineering,
 │   │                               # test-set ingestion, model training/loading, evaluation,
-│   │                               # explainability, inference logging)
+│   │                               # explainability, inference + deployment logging)
 │   ├── configs/                   # Pydantic config schemas + YAML loaders
 │   ├── models/                    # Model factory + interfaces
 │   ├── pipeline/                  # Orchestrators that chain components together
 │   └── plots.py                   # Evaluation/explainability plotting functions
-├── tests/                         # Unit tests + in-memory integration tests
+├── src_agent/                     # Diagnostic Copilot: MCP analytics server, LangChain
+│                                  # agent API, and the multimodal RAG pipeline
+├── tests/                         # Unit tests + in-memory integration tests + agents_test.py
 ├── training_logs/ , test_logs/    # Generated plots per run (gitignored)
 ├── mlruns/ , mlflow.db             # MLflow tracking store and artifacts (gitignored)
-├── monitor/                       # Real-time inference log database (gitignored)
+├── monitor/                       # Real-time inference log DB + deployment logs (gitignored)
 ├── trained_model/                 # Locally saved models, opt-in (tracked via Git LFS)
 ├── minio-data/                    # Local MinIO storage for development
 ├── README.md                      # Project overview and setup guide
@@ -400,9 +411,13 @@ Every prediction is logged to a SQLite database (`monitor/inference_log.db` by d
 `inference_readings` table (raw, unscaled sensor values + prediction, one row per cycle) for
 plotting, and a long/normalized `inference_shap_values` table (one row per feature per
 prediction) so an LLM agent can query SHAP trends with plain SQL later without pivoting.
-That's the intended next step this design sets up for - an agent that watches this database
-for drift and explains it via SHAP - but it's out of scope here; this piece only covers the
-inference pipeline, API, and demo.
+[app/api.py](app/api.py) also appends a structured line per prediction to
+`monitor/logs/<YYYY-MM-DD_HH>.log` via
+[src/components/deployment_logger.py](src/components/deployment_logger.py) -- a plain-text
+deployment history for ops tooling. It's not part of the Diagnostic Copilot's knowledge base
+(chat turns are logged there too, and re-ingesting a copilot's own past answers as if they
+were primary evidence would let it cite itself instead of the underlying data); `run_sql` and
+the other analytics tools are how the copilot answers questions about live predictions.
 
 ### The demo
 
@@ -458,17 +473,125 @@ with the repo root as context (`context: ..` in the compose files), since that's
 `INFERENCE_API_URL=http://model-server:8000` (the service name as hostname on the Compose
 network).
 
+## 🤖 Diagnostic Copilot (agent + multimodal RAG)
+
+An optional service, [src_agent/](src_agent/), that lets an operator or data scientist ask
+the inference log questions instead of reading dashboards. Its signature capability is
+**trust calibration**: this model relies most heavily on an engine's `cycle` count at the
+start and end of its life, and on raw sensors mid-life, so a *stable* prediction is not
+always evidence of a *healthy* engine -- the Copilot knows this and calibrates its verdicts
+accordingly (see the system prompt in [src_agent/prompts.py](src_agent/prompts.py)).
+
+**Architecture:**
+
+- [src_agent/mcp_server/](src_agent/mcp_server/) -- a FastMCP server (no LangChain
+  dependency, so any MCP client can use it) exposing six read-only analytics tools over the
+  inference log: `get_shap_evidence_profile` (the headline tool -- cycle-share vs
+  sensor-share of SHAP per life phase), `get_shap_trend`, `compare_to_training_distribution`
+  (out-of-distribution z-scores against `configs/agent/training_statistics.json`),
+  `get_prediction_trend`, `run_sql` (guarded read-only SELECT), and `render_chart` (returns a
+  chart spec plus a text digest -- raw series data never reaches the LLM, only the digest
+  does; the UI renders the spec).
+- [src_agent/api.py](src_agent/api.py) -- a LangChain tool-calling agent, streamed over SSE,
+  consuming the MCP tools via `langchain-mcp-adapters` plus a `knowledge_search` tool over a
+  Chroma-backed knowledge base (CMAPSS sensor reference, this README, and vision-captioned
+  training/evaluation plots -- see [src_agent/rag/](src_agent/rag/)). The knowledge base is
+  (re-)ingested automatically in the background on every startup (non-destructive upsert, so
+  it's cheap to repeat) rather than needing a manual step -- the API serves the six analytics
+  tools immediately and adds `knowledge_search` the moment ingestion finishes, no restart
+  needed. `GET /health` reports this as `rag_status`: `disabled` / `ingesting` / `ready` /
+  `failed`.
+- The Streamlit demo's **Diagnostic Copilot** tab ([app/copilot.py](app/copilot.py)) talks to
+  it; the tab degrades to a hint if the agent service isn't running, and shows a banner while
+  `rag_status` is `ingesting`, so the base demo never depends on it.
+
+**Backends:** OpenAI (default; needs an API key, entered in the UI or via `OPENAI_API_KEY`)
+or a local Ollama model (`qwen3.5:9b` by default) -- selectable per chat in the UI. Either
+way, the knowledge base is embedded and its plots captioned with the *default* backend's
+embedder and caption_model (`configs/agent/default.yaml` -> `backends:`); switching the
+default backend requires re-running ingest (below). Setting `backends.default: "ollama"`
+means knowledge-base ingest -- including captioning `rag_documents/*.png` -- never needs an
+OpenAI key.
+
+### Running it locally (no Docker)
+
+```bash
+# One-time: precompute the drift tool's per-sensor training statistics
+python scripts/run_training_stats.py
+
+# One-time: start Chroma (src_agent.api ingests into it automatically on startup below --
+# rag_documents/*.md and rag_documents/*.png (vision-captioned) plus this README)
+docker run -d -p 8100:8000 -v chroma-data:/data chromadb/chroma
+
+# Three long-running processes (separate terminals)
+python -m src_agent.mcp_server.server   # port 8200
+python -m src_agent.api                 # port 8300 -- ingests the knowledge base in the
+                                         # background on startup; GET /health -> rag_status
+streamlit run app/streamlit.py          # Diagnostic Copilot tab reaches localhost:8300
+```
+
+Force a full rebuild of the knowledge base directly (e.g. after adding docs, or switching
+the default backend's embedder) without waiting for the next restart:
+
+```bash
+python scripts/run_rag_ingest.py --reset
+```
+
+### Running it with Docker Compose
+
+```bash
+# Inference + Copilot, no LLM tracing:
+docker compose -f docker/docker-compose.agent.yml up --build
+
+# Same, plus OpenLIT for LLM observability (every generation's tokens/cost/latency,
+# tool-call spans, MCP spans, Chroma query spans -- UI at http://localhost:3000):
+docker compose -f docker/docker-compose.agent-tracing.yml up --build
+```
+
+Both are complete, standalone stacks (model-server, streamlit, mcp-server, agent-server,
+chroma), run from the repo root. `OPENAI_API_KEY` is picked up automatically from a
+repo-root `.env` via agent-server's `env_file` -- no key is fine too, it just means the
+OpenAI backend needs a per-request key from the UI. Ollama itself is **not** containerized;
+it keeps running on the host and is reached via `host.docker.internal`. agent-server ingests
+the knowledge base into the containerized Chroma automatically once it's up -- no manual
+step -- the Copilot tab shows a banner while that's in progress and the rest of the demo
+works normally in the meantime. To force a rebuild (e.g. after adding docs), run
+`python scripts/run_rag_ingest.py --reset` from your bare-metal environment against
+`localhost:8100`, same as the local-dev instructions above.
+
+Both compose files share [docker/Dockerfile.agent](docker/Dockerfile.agent) (built from
+[docker/requirements_agent.txt](docker/requirements_agent.txt), a dependency set scoped to
+`src_agent/` -- no scikit-learn/xgboost/shap/mlflow) for both `mcp-server` and
+`agent-server`; only the `command:` differs. Networking overrides for the containerized
+case (service-name hostnames instead of `localhost`) live in
+[configs/agent/docker.yaml](configs/agent/docker.yaml) -- a minimal file, since every field
+it doesn't set falls back to the same class defaults `configs/agent/default.yaml` uses.
+Tracing toggles via two environment variables (`AGENT_TRACING_ENABLED`,
+`AGENT_TRACING_OTLP_ENDPOINT`) rather than a third config file, since fail-open tracing is
+the only difference between the two compose variants. Tracing itself is genuinely
+optional and fails open either way: an unreachable OpenLIT never breaks a chat turn.
+
+A trace of one Diagnostic Copilot turn in the OpenLIT UI -- the full tool-call tree (MCP
+spans, `execute_tool` spans per analytics tool, the chat model calls) with per-span cost,
+tokens, and duration:
+
+![OpenLIT trace of a Diagnostic Copilot turn, showing the tool-call tree for get_shap_evidence_profile and related spans](images/agent_tracing_openlit.png)
+
 ## ✅ Running the tests
 
 ```bash
 pytest tests/unit_test.py         # component-level unit tests
 pytest tests/integration_test.py  # full data-prep -> train -> eval flow, gatekeeping
+pytest tests/agents_test.py       # Diagnostic Copilot: MCP tools, agent loop, RAG
 pytest tests/                     # everything
 ```
 
 **Unit tests** (`unit_test.py`) exercise individual `src/components/` functions in
 isolation with small, hand-built DataFrames - fast, no I/O, pinpoint exactly which
-transformation broke.
+transformation broke. **`agents_test.py`** does the same for `src_agent/`: MCP tool math
+against temp SQLite fixtures, the SQL guard's rejection cases, the agent loop against a
+scripted fake chat model, and the RAG pipeline's readers/splitters -- no live LLM calls, so
+it runs the same everywhere `unit_test.py` does.
 
 **Integration tests** (`integration_test.py`) run the real `DataPreparationPipeline` and
 `TestSetPreparationPipeline` against the actual `data/raw/*.txt` files end-to-end (outputs

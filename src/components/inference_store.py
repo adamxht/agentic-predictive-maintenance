@@ -71,11 +71,12 @@ def log_inference_reading(
             "predicted_life_ratio",
             "timestamp",
         ]
+        # float() guards against numpy scalars, which sqlite3 would store as BLOBs.
         values = [
             engine_id,
             cycle,
-            *sensor_readings.values(),
-            predicted_life_ratio,
+            *(float(value) for value in sensor_readings.values()),
+            float(predicted_life_ratio),
             timestamp,
         ]
         column_list = ", ".join(f'"{column}"' for column in columns)
@@ -99,8 +100,9 @@ def log_shap_values(
     """Insert one row per feature's SHAP value for a single prediction."""
     try:
         timestamp = datetime.now(UTC).isoformat()
+        # float() guards against numpy scalars, which sqlite3 would store as BLOBs.
         rows = [
-            (engine_id, cycle, feature_name, shap_value, timestamp)
+            (engine_id, cycle, feature_name, float(shap_value), timestamp)
             for feature_name, shap_value in shap_values.items()
         ]
         with sqlite3.connect(database_path) as connection:
@@ -110,5 +112,28 @@ def log_shap_values(
                 "VALUES (?, ?, ?, ?, ?)",
                 rows,
             )
+    except Exception as error:
+        raise CustomException(str(error)) from error
+
+
+def delete_engine_history(database_path: str, engine_id: int) -> None:
+    """Clear one engine's logged readings and SHAP values.
+
+    Rows accumulate across every run (restarts included) with no natural
+    upper bound on cycle number, so "latest cycle" queries would otherwise
+    keep returning a prior run's furthest cycle instead of the current run's
+    -- this is what a UI "reset" should call to give an engine a clean slate.
+    """
+    try:
+        with sqlite3.connect(database_path) as connection:
+            connection.execute(
+                f"DELETE FROM {INFERENCE_READINGS_TABLE} WHERE engine_id = ?",
+                (engine_id,),
+            )
+            connection.execute(
+                f"DELETE FROM {SHAP_VALUES_TABLE} WHERE engine_id = ?",
+                (engine_id,),
+            )
+        logging.info(f"Cleared inference log history for engine {engine_id}")
     except Exception as error:
         raise CustomException(str(error)) from error
