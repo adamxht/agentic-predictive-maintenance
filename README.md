@@ -25,8 +25,22 @@ An end-to-end time series machine learning project on the NASA CMAPSS dataset, c
 
 ## 🎬 Live demo
 
-![Live demo video](images/live_demo.mp4)
-*(placeholder - video walkthrough of the app with a pre-ingested knowledge base)*
+*(Video was converted from .mp4 to .gif, watch the original images/demo-agent.mp4 for better quality)*
+
+<p align="center">
+  <img src="images/demo-agent.gif" width="800">
+</p>
+
+*(walkthrough of the app with a pre-ingested knowledge base)*
+
+The demo walks through these example prompts to the Diagnostic Copilot:
+
+| Prompt | What it's trying to show |
+| --- | --- |
+| "What is the status of engine 75?" | Agent fetching real time data via MCP tools |
+| "Plot the shap values and model predictions against cycle." | Generative BI capability, plotting graphs |
+| "What does Ps30 measure?" | Regular text-only RAG |
+| "Check the knowledge base and tell me which engine has the highest error?" | Multimodel RAG, fetching details from `rag_documents/xgboost_error_by_engine.png` |
 
 The fastest way to see everything running - inference API, Streamlit demo, and the
 Diagnostic Copilot with LLM tracing - is one Docker Compose stack. Just Docker and the
