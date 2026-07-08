@@ -463,6 +463,14 @@ Engines 25, 75, and 26 have the lowest errors.
 
 ![XGBoost SHAP bar plot](images/xgboost_shap_bar.png)
 
+Currently the model is exhibiting shortcut learning in which it relies too heabily on `cycle`,
+The LLM agent is useful in this kind of scenario to  detect the shap values imbalance and inform 
+the data scientists in case this is uncaught until deployment.
+
+Due to the time limitation, this issue will not be fixed, although there are experiments conucted
+by removing `cycle` from the feature set in `notebooks/step4_modeling_life_ratio_remove_cycle.ipynb`.
+Future work may include destroying the linear relationship between `cycle` and `life_ratio` by binning.
+
 Aside from `cycle`, `Ps30` (static pressure at HPC outlet) is the most important sensor
 feature, based on 10 samples.
 
