@@ -1,0 +1,223 @@
+# Every service in the repo in one stack: MinIO + MLflow (local dev /
+# training-side tooling) alongside the full live demo (inference API,
+# Streamlit, the Diagnostic Copilot's mcp-server/agent-server/chroma, and
+# OpenLIT/ClickHouse tracing). Union of docker-compose.full.yml and
+# docker-compose.agent-tracing.yml -- ports were already chosen not to
+# collide across those two (see clickhouse's comment below), so combining
+# them needs no remapping.
+name: predictive-maintenance-everything
+
+services:
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+    command: server /data --console-address ":9001"
+
+  mlflow:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.full
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow-data:/app/mlflow_data
+    command: mlflow server --backend-store-uri sqlite:////app/mlflow_data/mlflow.db --default-artifact-root /app/mlflow_data/mlruns --host 0.0.0.0 --port 5000
+
+  model-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.inference
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../monitor:/app/monitor
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  streamlit:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.inference
+    command: streamlit run app/streamlit.py --server.address=0.0.0.0 --server.port=8501
+    ports:
+      - "8501:8501"
+    environment:
+      INFERENCE_API_URL: http://model-server:8000
+      AGENT_API_URL: http://agent-server:8300
+    depends_on:
+      model-server:
+        condition: service_healthy
+
+  mcp-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.agent
+    command: ["python", "-m", "src_agent.mcp_server.server"]
+    ports:
+      - "8200:8200"
+    environment:
+      AGENT_CONFIG_PATH: configs/agent/docker.yaml
+    volumes:
+      - ../monitor:/app/monitor
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import socket; socket.create_connection(('localhost', 8200), 2)",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  chroma:
+    image: chromadb/chroma
+    ports:
+      - "8100:8000"
+    volumes:
+      - chroma-data:/data
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8000"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  agent-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.agent
+    env_file:
+      - path: ../.env # repo-root .env, e.g. OPENAI_API_KEY -- optional, see below
+        required: false
+    ports:
+      - "8300:8300"
+    environment:
+      AGENT_CONFIG_PATH: configs/agent/docker.yaml
+      AGENT_TRACING_ENABLED: "true"
+      AGENT_TRACING_OTLP_ENDPOINT: http://openlit:4318
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # harmless on Docker Desktop, needed on native Linux
+    volumes:
+      - ../monitor:/app/monitor
+    depends_on:
+      mcp-server:
+        condition: service_healthy
+      chroma:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8300/health')",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.4.1
+    environment:
+      CLICKHOUSE_PASSWORD: ${OPENLIT_DB_PASSWORD:-OPENLIT}
+      CLICKHOUSE_USER: ${OPENLIT_DB_USER:-default}
+      CLICKHOUSE_DATABASE: ${OPENLIT_DB_NAME:-openlit}
+      CLICKHOUSE_ALWAYS_RUN_INITDB_SCRIPTS: true
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./assets/openlit/clickhouse-config.xml:/etc/clickhouse-server/config.d/custom-config.xml:ro
+      - ./assets/openlit/clickhouse-init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+    ports:
+      - "9100:9000" # native protocol -- shifted from 9000, MinIO already owns that
+      - "8124:8123" # HTTP -- shifted from 8123 to stay clear of other stacks
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --user=$${CLICKHOUSE_USER} --password=$${CLICKHOUSE_PASSWORD} --query='SELECT 1' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 100s
+    restart: always
+
+  openlit:
+    image: ghcr.io/openlit/openlit:latest
+    environment:
+      TELEMETRY_ENABLED: "true"
+      INIT_DB_HOST: clickhouse
+      INIT_DB_PORT: 8123
+      INIT_DB_DATABASE: ${OPENLIT_DB_NAME:-openlit}
+      INIT_DB_USERNAME: ${OPENLIT_DB_USER:-default}
+      INIT_DB_PASSWORD: ${OPENLIT_DB_PASSWORD:-OPENLIT}
+      SQLITE_DATABASE_URL: file:/app/client/data/data.db
+      PORT: 3000
+      DOCKER_PORT: 3000
+    ports:
+      - "3000:3000" # web UI
+      - "4317:4317" # OTLP gRPC receiver
+      - "4318:4318" # OTLP HTTP receiver -- matches AGENT_TRACING_OTLP_ENDPOINT above
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    volumes:
+      - openlit-data:/app/client/data
+      - ./assets/openlit/otel-collector-config.yaml:/etc/otel/otel-collector-config.yaml:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r=>{process.exit(r.ok?0:1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+    restart: always
+
+  # Works around an upstream seed-script bug (openlit/openlit:latest,
+  # prisma/seed.js) that leaves ClickHouse unregistered with the OpenLIT UI
+  # -- see assets/register_openlit_db_config.sh. One-shot: runs once per
+  # `compose up` and exits; idempotent, nothing else depends on it.
+  openlit-db-config:
+    image: curlimages/curl:8.11.0
+    depends_on:
+      openlit:
+        condition: service_healthy
+    environment:
+      OPENLIT_URL: http://openlit:3000
+      # OpenLIT's own seed script creates this account (it's the account
+      # that logging into the UI at localhost:3000 also uses) -- it's the
+      # image's published default for exactly this bootstrap purpose, not
+      # a secret of this project's.
+      OPENLIT_SEED_EMAIL: user@openlit.io
+      OPENLIT_SEED_PASSWORD: openlituser
+      INIT_DB_HOST: clickhouse
+      INIT_DB_PORT: "8123"
+      INIT_DB_DATABASE: ${OPENLIT_DB_NAME:-openlit}
+      INIT_DB_USERNAME: ${OPENLIT_DB_USER:-default}
+      INIT_DB_PASSWORD: ${OPENLIT_DB_PASSWORD:-OPENLIT}
+    volumes:
+      - ./assets/register_openlit_db_config.sh:/register.sh:ro
+    entrypoint: ["sh", "/register.sh"]
+
+volumes:
+  minio-data:
+  mlflow-data:
+  chroma-data:
+  clickhouse-data:
+  openlit-data:
