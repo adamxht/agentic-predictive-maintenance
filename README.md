@@ -82,8 +82,8 @@ running without Docker.
   <img src="images/system_arch_diagram.png" width="900">
 </p>
 
-*(data versioning &rarr; ML pipelines &rarr; serving &rarr; Streamlit frontend &rarr; the
-Diagnostic Copilot agent stack)*
+*(Data versioning &rarr; ML pipelines &rarr; Model serving &rarr; Streamlit frontend &rarr;
+Diagnostic Copilot Agent stack)*
 
 ## 📁 Project structure
 
