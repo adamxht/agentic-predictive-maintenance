@@ -15,7 +15,7 @@ An end-to-end time series machine learning project on the NASA CMAPSS dataset, c
 - A stateless real-time inference API (FastAPI) and a Streamlit demo that replays raw
   engine sensor readings as a live feed, with SHAP explanations and a simulated
   sensor-drift button
-- An optional **Diagnostic Copilot** agent ([src_agent/](src_agent/)) - MCP server +
+- A **Diagnostic Copilot** agent ([src_agent/](src_agent/)) - MCP server +
   LangChain agent + multimodal RAG for trust-calibrated Q&A over the inference log ("can I
   trust this prediction?"), backed by OpenAI or local Ollama, with optional OpenLIT tracing
 - Four Docker Compose stacks under [docker/](docker/) for running any of the above with no
@@ -78,9 +78,12 @@ running without Docker.
 
 ## 🏗️ Architecture
 
-![Architecture diagram](images/architecture_diagram.png)
-*(placeholder - diagram of the full stack: data pipeline, training, inference API,
-Streamlit demo, and the Diagnostic Copilot agent + RAG)*
+<p align="center">
+  <img src="images/system_arch_diagram.png" width="900">
+</p>
+
+*(data versioning &rarr; ML pipelines &rarr; serving &rarr; Streamlit frontend &rarr; the
+Diagnostic Copilot agent stack)*
 
 ## 📁 Project structure
 
