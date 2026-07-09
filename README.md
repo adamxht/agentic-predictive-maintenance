@@ -2,6 +2,8 @@
 
 An end-to-end time series machine learning project on the NASA CMAPSS dataset, combining data science, MLOps, and an agentic/generative AI workflow for descriptive, diagnostic, and predictive analytics.
 
+The NASA C-MAPSS (Commercial Modular Aero-Propulsion System Simulation) dataset is a simulated aircraft turbofan engine degradation dataset containing multivariate sensor measurements over time (cycles), designed for predictive maintenance and Remaining Useful Life estimation.
+
 ## ✨ What this project includes
 
 - A complete data science workflow for engine life span prediction
